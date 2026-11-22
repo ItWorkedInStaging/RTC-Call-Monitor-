@@ -1,7 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RtcCallMonitor.Configuration;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -14,11 +15,8 @@ namespace RtcCallMonitor
     public class TrafficMonitor
     {
         private readonly Dictionary<string, IPNetwork[]> _knownNetworks = new();
-        private bool _callActive;
-        private string _callIP;
-        private DateTimeOffset _callStart;
-        private readonly Dictionary<string, int> _inboundStats = new();
-        private readonly Dictionary<string, int> _outboundStats = new();
+        private readonly ConcurrentDictionary<string, string> _providerCache = new();
+        private readonly CallDetector _detector;
         private readonly ILogger<TrafficMonitor> _logger;
         private readonly IOptions<Application> _appConfig;
         private NetworkListener _listener;
@@ -26,7 +24,7 @@ namespace RtcCallMonitor
 
         public delegate void UnknownNetwork(string ip, int packetCount);
         public delegate void CallStart(string ip, string provider, int packetCount);
-        public delegate void CallEnd(TimeSpan ts);
+        public delegate void CallEnd(string provider, TimeSpan ts);
 
         public event UnknownNetwork OnUnknownProvider;
         public event CallStart OnCallStarted;
@@ -49,6 +47,12 @@ namespace RtcCallMonitor
                 _knownNetworks.Add(network.Key, cidrList.ToArray());
                 _logger.LogInformation($"loaded provider {network.Key}, {network.Value.Length} network prefixes");
             }
+
+            _detector = new CallDetector(
+                LookupProvider,
+                _appConfig.Value.MinPacketRate ?? 1,
+                _appConfig.Value.CallStartIntervals ?? 2,
+                _appConfig.Value.CallEndIntervals ?? 3);
         }
 
         public void Start()
@@ -57,21 +61,11 @@ namespace RtcCallMonitor
             {
                 if (ipHeader.Inbound)
                 {
-                    var source = ipHeader.SourceAddress.ToString();
-                    if (!_inboundStats.ContainsKey(source))
-                    {
-                        _inboundStats.Add(source, 0);
-                    }
-                    _inboundStats[source]++;
+                    _detector.RecordInbound(ipHeader.SourceAddress.ToString());
                 }
                 else
                 {
-                    var dest = ipHeader.DestinationAddress.ToString();
-                    if (!_outboundStats.ContainsKey(dest))
-                    {
-                        _outboundStats.Add(dest, 0);
-                    }
-                    _outboundStats[dest]++;
+                    _detector.RecordOutbound(ipHeader.DestinationAddress.ToString());
                 }
             };
 
@@ -119,52 +113,34 @@ namespace RtcCallMonitor
 
         public void CheckStats()
         {
-            // if there is an active call, filter by the active call ip
-            // otherwise filter for the top traffic producer for the period
-            var topInbound = _inboundStats
-                .Where(x => !_callActive || x.Key == _callIP)
-                .OrderByDescending(x => x.Value)
-                .FirstOrDefault();
-
-            var topOutbound = _outboundStats
-                .Where(x => !_callActive || x.Key == _callIP)
-                .OrderByDescending(x => x.Value)
-                .FirstOrDefault();
-
-            var (ip, rate) = topInbound.Value > topInbound.Value ? topInbound : topOutbound;
-
-            
-            if (rate >= (_appConfig.Value.MinPacketRate ?? 1))
+            foreach (var e in _detector.Evaluate(DateTimeOffset.Now))
             {
-                var provider = _knownNetworks
-                .SelectMany(p => p.Value, (kvp, ip) => (kvp.Key, ip))
-                .Where(x => x.ip.Contains(IPAddress.Parse(ip)))
-                .Select(x => x.Key)
-                .FirstOrDefault();
-
-                if (provider == null)
+                switch (e.Type)
                 {
-                    OnUnknownProvider.Invoke(ip, rate);
-                }
-                else if (!_callActive)
-                {
-                    _callStart = DateTimeOffset.Now;
-                    _callActive = true;
-                    _callIP = ip;
-                    OnCallStarted.Invoke(ip, provider, rate);
+                    case CallEventType.UnknownProvider:
+                        OnUnknownProvider?.Invoke(e.Ip, e.PacketCount);
+                        break;
+                    case CallEventType.CallStarted:
+                        OnCallStarted?.Invoke(e.Ip, e.Provider, e.PacketCount);
+                        break;
+                    case CallEventType.CallEnded:
+                        OnCallEnded?.Invoke(e.Provider, e.Duration);
+                        break;
                 }
             }
-            else
+        }
+
+        private string LookupProvider(string ip)
+        {
+            return _providerCache.GetOrAdd(ip, key =>
             {
-                if (_callActive)
+                if (!IPAddress.TryParse(key, out var address)) return null;
+                foreach (var provider in _knownNetworks)
                 {
-                    _callActive = false;
-                    _callIP = null;
-                    OnCallEnded.Invoke(DateTimeOffset.Now - _callStart);
+                    if (provider.Value.Any(n => n.Contains(address))) return provider.Key;
                 }
-            }
-            _inboundStats.Clear();
-            _outboundStats.Clear();
+                return null;
+            });
         }
     }
 }

@@ -54,7 +54,11 @@ namespace RtcCallMonitor
                 //Next thirty two hold the destination IP address
                 _destinationIPAddress = (uint)(binaryReader.ReadInt32());
             }
-            catch { }
+            catch
+            {
+                // too short to be an IPv4 header; mark as not UDP so it is ignored
+                _protocol = 0;
+            }
         }
 
         public bool IsTCP => _protocol == 6;

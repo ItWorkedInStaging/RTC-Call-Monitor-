@@ -55,12 +55,7 @@ cd src
 dotnet run
 ```
 
-Linux/macOS:
-
-```bash
-cd src
-sudo dotnet run
-```
+Linux/macOS: not currently supported. Packet capture uses `SIO_RCVALL`, which only exists on Windows, so the app exits with an error on other platforms.
 
 ### Additional Configuration
 
@@ -88,11 +83,25 @@ POST body included when calling the webhook
 
 ```json
 {
+  "provider": "slack",
   "duration": 123
 }
 ```
 
 `duration` is the call length in seconds.
+
+Webhook failures (timeouts, non-2xx responses) are logged as warnings.
+
+#### Call detection timing
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CheckInterval` | `1000` | Length of each measurement interval, in milliseconds |
+| `MinPacketRate` | `1` | UDP packets per interval to or from a provider IP that count as call traffic |
+| `CallStartIntervals` | `2` | Consecutive intervals with call traffic before the call-start webhook fires |
+| `CallEndIntervals` | `3` | Consecutive intervals without call traffic before the call-end webhook fires |
+
+The end delay stops short network hiccups from ending a call and starting it again. While a call is active, traffic to any IP of the same provider keeps it alive, so a provider moving the call to another media server doesn't end it.
 
 #### Adding new providers
 

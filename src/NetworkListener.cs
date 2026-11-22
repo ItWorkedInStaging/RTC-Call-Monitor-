@@ -26,6 +26,12 @@ namespace RtcCallMonitor
 
         private Socket CreateAndBindSocket()
         {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // SIO_RCVALL (promiscuous raw socket) is a Windows-only IOControl
+                throw new PlatformNotSupportedException("Packet capture currently requires Windows (SIO_RCVALL is not available on this OS).");
+            }
+
             const int SIO_RCVALL = unchecked((int)0x98000001);
 
             var s = new Socket(AddressFamily.InterNetwork, SocketType.Raw, ProtocolType.Udp);
@@ -60,7 +66,7 @@ namespace RtcCallMonitor
 
             _logger.LogInformation($"monitoring traffic on {_localIp}");
 
-            _socket.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(OnReceive), null);
+            _socket.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(OnReceive), _socket);
         }
 
         public void UpdateIpAddress(IPAddress newAddress)
@@ -81,20 +87,27 @@ namespace RtcCallMonitor
          
         private void OnReceive(IAsyncResult result)
         {
+            // use the socket this read was started on, not _socket, which may already
+            // have been replaced by UpdateIpAddress()
+            var socket = (Socket)result.AsyncState;
+
             try
             {
-                int defaultLength = _buffer.Length;
+                // A raw socket is never "Connected", so EndReceive must always be called
+                // to complete the read and get the real packet length.
+                int length = socket.EndReceive(result);
 
-                if (_socket.Connected)
-                {
-                    defaultLength = _socket.EndReceive(result);
-                }
-
-                IPHeader ipHeader = new(_buffer, defaultLength, _localIp);
+                IPHeader ipHeader = new(_buffer, length, _localIp);
                 if (IsOutsideUDPTaffice(ipHeader))
                 {
                     OnUDPTafficReceived?.Invoke(ipHeader);
                 }
+            }
+            catch (Exception e) when (e is ObjectDisposedException ||
+                                      (e is SocketException se && se.SocketErrorCode == SocketError.OperationAborted))
+            {
+                // socket was closed by Stop() (e.g. IP address changed); don't re-arm it
+                return;
             }
             catch (Exception e)
             {
@@ -103,7 +116,7 @@ namespace RtcCallMonitor
 
             try
             {
-                _socket.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(OnReceive), null);
+                socket.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(OnReceive), socket);
             }
             catch (ObjectDisposedException) { }
         }

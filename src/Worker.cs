@@ -32,9 +32,11 @@ namespace RtcCallMonitor
             {
                 _logger.LogError(e.ToString());
                 _host.StopApplication();
+                return;
             }
 
-            _logger.LogInformation($"Using check interval of {_appConfig.Value.CheckInterval ?? 1000}ms, min packet rate {_appConfig.Value.MinPacketRate ?? 1}");
+            _logger.LogInformation($"Using check interval of {_appConfig.Value.CheckInterval ?? 1000}ms, min packet rate {_appConfig.Value.MinPacketRate ?? 1}, " +
+                $"start after {_appConfig.Value.CallStartIntervals ?? 2} interval(s), end after {_appConfig.Value.CallEndIntervals ?? 3} interval(s)");
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -42,10 +44,14 @@ namespace RtcCallMonitor
                     await Task.Delay(_appConfig.Value.CheckInterval ?? 1000, stoppingToken);
                     _monitor.CheckStats();
                 }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 catch (Exception e)
                 {
                     _logger.LogError(e, String.Empty);
-                } 
+                }
             }
         }
 
@@ -59,16 +65,16 @@ namespace RtcCallMonitor
             _logger.LogInformation($"call started for {provider} on {ip} count {packetCount}");
             if (Uri.TryCreate(_appConfig.Value.CallStartWebhook, UriKind.Absolute, out Uri uri))
             {
-                Task.Run( () => Webhook.Invoke(uri, new { provider }));
+                _ = Webhook.Invoke(uri, new { provider }, _logger);
             }
         } 
 
-        private void OnCallEnded(TimeSpan ts)
+        private void OnCallEnded(string provider, TimeSpan ts)
         {
-            _logger.LogInformation($"call ended, time {(int)ts.TotalSeconds} seconds");
+            _logger.LogInformation($"call ended for {provider}, time {(int)ts.TotalSeconds} seconds");
             if (Uri.TryCreate(_appConfig.Value.CallEndWebhook, UriKind.Absolute, out Uri uri))
             {
-                Task.Run(() => Webhook.Invoke(uri, new { duration = ts.TotalSeconds }));
+                _ = Webhook.Invoke(uri, new { provider, duration = (int)ts.TotalSeconds }, _logger);
             }
         }
     }
