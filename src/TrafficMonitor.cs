@@ -42,7 +42,11 @@ namespace RtcCallMonitor
                 var cidrList = new List<IPNetwork>();
                 foreach (var cidr in network.Value)
                 {
-                    cidrList.Add(IPNetwork.Parse(cidr));
+                    cidrList.Add(NetworkParser.Parse(cidr, out var corrected));
+                    if (corrected != null)
+                    {
+                        _logger.LogWarning($"provider {network.Key}: '{cidr}' is not a network address, using {corrected}");
+                    }
                 }
                 _knownNetworks.Add(network.Key, cidrList.ToArray());
                 _logger.LogInformation($"loaded provider {network.Key}, {network.Value.Length} network prefixes");

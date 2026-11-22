@@ -27,7 +27,7 @@ Consolidating subnet ranges (optional): `python .\consolidate-ips.py --input "D:
 
 ### Prerequisites
 
-- [.NET 5.0 SDK](https://dotnet.microsoft.com/download/dotnet/5.0)
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ### Minimal Configuration
 
@@ -42,7 +42,7 @@ Most users will have a network configuration similar to the following:
 
 The configuration will be
 
-`"LocalNetwork": "192.168.1.0/24"`
+`"LocalNetwork": ["192.168.1.0/24"]`
 
 ### Build/Run
 
@@ -53,6 +53,12 @@ Windows: Open a new Powershell or command prompt using _Run as Administrator_
 ```bash
 cd src
 dotnet run
+```
+
+Run the tests from the repository root (no elevation needed):
+
+```bash
+dotnet test
 ```
 
 Linux/macOS: not currently supported. Packet capture uses `SIO_RCVALL`, which only exists on Windows, so the app exits with an error on other platforms.

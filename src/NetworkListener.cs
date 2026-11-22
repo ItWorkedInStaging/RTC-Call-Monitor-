@@ -55,7 +55,11 @@ namespace RtcCallMonitor
 
             foreach (var network in _appConfig.Value.LocalNetwork)
             {
-                _localCIDR.Add(IPNetwork.Parse(network));
+                _localCIDR.Add(NetworkParser.Parse(network, out var corrected));
+                if (corrected != null)
+                {
+                    _logger.LogWarning($"LocalNetwork '{network}' is not a network address, using {corrected}");
+                }
             }
         }
             
