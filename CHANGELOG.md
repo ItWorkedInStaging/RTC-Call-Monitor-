@@ -15,6 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - Switches: `-CheckOnly` (checks only), `-SkipChecks`, `-NoInstall` (report instead of installing).
 
 ### Fixed
+- First install failed with "Cannot find path ...appsettings.Local.example.json": the template was left out of the published files. `build-release.ps1` 1.2.2 puts it in the release, and `Install.ps1` 1.0.3 also copes without it.
+- `Install.ps1` 1.0.2: started from the source folder, it points to the built release's `Install.cmd` (or says to run `build-release.ps1`) instead of failing.
 - `build-release.ps1` 1.2.1 and `Install.ps1` 1.0.1: in Windows PowerShell 5.1, a program writing to its error output (git outside a clone, dotnet warnings) stopped the script; the checks now go by exit codes.
 
 ## [2.5.0] - 2026-11-23

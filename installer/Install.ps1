@@ -1,6 +1,9 @@
 # Install.ps1
-# Version: 1.0.2
+# Version: 1.0.3
 # Changelog:
+#   1.0.3 - First install no longer fails when the release has no
+#           appsettings.Local.example.json (it is looked for in the release too,
+#           and a minimal file is written if it is nowhere).
 #   1.0.2 - Started from the source folder instead of a release: points to the
 #           built release's Install.cmd, or says to run build-release.ps1 first.
 #   1.0.1 - .NET runtime check: dotnet writing to stderr no longer counts as
@@ -114,7 +117,30 @@ function Install-Elevated {
             Copy-Item $backup $localConfig
             Write-Ok "restored your settings from the previous uninstall ($backup)"
         } else {
-            Copy-Item (Join-Path $InstallDir 'appsettings.Local.example.json') $localConfig
+            $example = @((Join-Path $InstallDir 'appsettings.Local.example.json'),
+                         (Join-Path $appSrc 'appsettings.Local.example.json'),
+                         (Join-Path $PackageRoot 'appsettings.Local.example.json')) |
+                       Where-Object { Test-Path $_ } | Select-Object -First 1
+            if ($example) {
+                Copy-Item $example $localConfig
+            } else {
+                # no template in the release: start with the settings most people change
+                @'
+{
+  "Mqtt": {
+    "Enabled": false,
+    "Host": "",
+    "Username": "",
+    "Password": ""
+  },
+  "Webhook": {
+    "Enabled": false,
+    "CallStartUrl": "",
+    "CallEndUrl": ""
+  }
+}
+'@ | Set-Content -Path $localConfig -Encoding UTF8
+            }
             $newConfig = $true
             Write-Note "created appsettings.Local.json from the example: fill in your MQTT/webhook details"
         }

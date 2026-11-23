@@ -1,6 +1,8 @@
 # build-release.ps1
-# Version: 1.2.1
+# Version: 1.2.2
 # Changelog:
+#   1.2.2 - Puts appsettings.Local.example.json in the release (the installer
+#           uses it to create appsettings.Local.json on a first install).
 #   1.2.1 - Fix for Windows PowerShell 5.1: a program writing to stderr (git
 #           outside a clone, dotnet warnings) stopped the script even with
 #           2>$null. The checks now run external programs with errors
@@ -282,6 +284,8 @@ foreach ($private in @('app\appsettings.Local.json', 'app\providers\auto')) {
     $path = Join-Path $out $private
     if (Test-Path $path) { Remove-Item -Recurse -Force $path }
 }
+# the settings template the installer copies to appsettings.Local.json on a first install
+Copy-Item (Join-Path $root 'src\appsettings.Local.example.json') (Join-Path $out 'app')
 # debugging symbols are not needed to run it
 Get-ChildItem -Path $out -Recurse -Filter '*.pdb' | Remove-Item -Force
 
