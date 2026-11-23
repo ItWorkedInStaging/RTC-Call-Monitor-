@@ -14,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `RTCMON_CONFIG_DIR` points the config folder somewhere else.
 
 ### Changed
-- Tray icon in the Windows 11 style (tray 1.3.0): a monochrome Fluent headset glyph that follows the taskbar's light/dark mode, like the OneDrive and Microsoft 365 icons, with a status badge (red = on a call, grey ‖ = paused, amber ! = needs attention; dimmed = monitor not running). Drawn at the exact tray size, so it is sharp at 125/150/200 % scaling.
+- Tray icon in the Windows 11 style (tray 1.3.0): a monochrome Fluent headset glyph that follows the taskbar's light/dark mode, like the OneDrive and Microsoft 365 icons, with a status badge (red = on a call, grey ‖ = paused, amber ! = needs attention; dimmed = monitor not running); the badges have a subtle gradient and shadow like OneDrive's. Drawn at the exact tray size, so it is sharp at 125/150/200 % scaling.
 - **Breaking:** your settings, your own provider lists and the downloaded lists move from `C:\Program Files\RtcCallMonitor` to the config folder `C:\ProgramData\RtcCallMonitor\config`, locked to SYSTEM and Administrators. `Install.ps1` 1.1.0 moves them on upgrade (a custom `providers\3cx.txt` included). An `appsettings.Local.json` left next to the program still applies, with a warning.
 - Your own provider lists add to a bundled or downloaded list of the same name instead of replacing it.
 - The tray's **Open config folder** is gone (the folder is locked); **Settings...** replaces it.

@@ -1,7 +1,8 @@
 <!--
   RtcCallMonitor.Tray.csproj
-  Version: 1.3.0
+  Version: 1.3.1
   Changelog:
+    1.3.1 - Subtle gradient, shadow and rim on the status badges.
     1.3.0 - Windows 11 style status icons.
     1.2.0 - Settings... menu item; links SettingsContract.cs (pipe protocol 2).
     1.1.0 - Dark mode menu.
@@ -17,7 +18,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <AssemblyName>RtcCallMonitor.Tray</AssemblyName>
     <RootNamespace>RtcCallMonitor.Tray</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>

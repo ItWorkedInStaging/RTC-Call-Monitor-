@@ -1,6 +1,9 @@
 // TrayIcons.cs
-// Version: 2.0.0
+// Version: 2.1.0
 // Changelog:
+//   2.1.0 - Badges get a subtle depth like the OneDrive/Microsoft 365 icons:
+//           a top-left to bottom-right gradient (slightly lighter to slightly
+//           darker), a soft drop shadow and a faint darker rim.
 //   2.0.0 - Windows 11 style, like OneDrive and the other Microsoft 365 tray
 //           icons: a monochrome Fluent headset glyph (Segoe Fluent Icons, or
 //           Segoe MDL2 Assets on Windows 10) in the taskbar's colour (white on
@@ -156,9 +159,25 @@ namespace RtcCallMonitor.Tray
             }
             g.CompositingMode = old;
 
-            using (var brush = new SolidBrush(fill))
+            // soft drop shadow: two offset, see-through layers read as a small blur
+            var drop = Math.Max(0.75f, size / 24f);
+            using (var shadow = new SolidBrush(Color.FromArgb(38, 0, 0, 0)))
+            {
+                g.FillEllipse(shadow, RectangleF.Inflate(new RectangleF(badge.X, badge.Y + drop, d, d), drop * 0.6f, drop * 0.6f));
+                g.FillEllipse(shadow, new RectangleF(badge.X, badge.Y + drop, d, d));
+            }
+
+            // gentle gradient: light from the top left, as in Fluent icons
+            using (var brush = new LinearGradientBrush(RectangleF.Inflate(badge, 1, 1), Shade(fill, 0.22f), Shade(fill, -0.14f), LinearGradientMode.ForwardDiagonal))
             {
                 g.FillEllipse(brush, badge);
+            }
+
+            // faint rim so the badge keeps its edge on any wallpaper or accent colour
+            using (var rim = new Pen(Color.FromArgb(70, Shade(fill, -0.45f)), Math.Max(0.75f, size / 32f)))
+            {
+                var inset = rim.Width / 2;
+                g.DrawEllipse(rim, RectangleF.Inflate(badge, -inset, -inset));
             }
 
             if (mark == null) return;
@@ -181,6 +200,15 @@ namespace RtcCallMonitor.Tray
                 g.FillRectangle(ink, cx - w / 2, top, w, bar);
                 g.FillRectangle(ink, cx - w / 2, top + bar + Math.Max(1f, d * 0.08f), w, w);
             }
+        }
+
+        /// <summary>amount &gt; 0 mixes towards white, &lt; 0 towards black.</summary>
+        private static Color Shade(Color c, float amount)
+        {
+            int Mix(int v) => amount >= 0
+                ? (int)Math.Round(v + (255 - v) * amount)
+                : (int)Math.Round(v * (1 + amount));
+            return Color.FromArgb(c.A, Mix(c.R), Mix(c.G), Mix(c.B));
         }
 
         // ------------------------------------------------------------------ 1.x fallback
