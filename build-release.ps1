@@ -1,6 +1,10 @@
 # build-release.ps1
-# Version: 1.2.0
+# Version: 1.2.1
 # Changelog:
+#   1.2.1 - Fix for Windows PowerShell 5.1: a program writing to stderr (git
+#           outside a clone, dotnet warnings) stopped the script even with
+#           2>$null. The checks now run external programs with errors
+#           non-fatal, and the git check looks for a .git folder first.
 #   1.2.0 - Installs what is missing instead of only reporting it: the .NET 10
 #           SDK and Desktop Runtime (winget) and the nuget.org source. Checks
 #           that the source folder has every part of the release (an older
@@ -77,10 +81,15 @@ function Install-WithWinget($id, $what) {
 }
 
 function Get-DotNetList($what) {
+    $ErrorActionPreference = 'Continue'
     try { return @(& dotnet $what 2>$null) } catch { return @() }
 }
 
 function Invoke-PreflightChecks {
+    # Windows PowerShell 5.1 turns any stderr output of a program into a terminating
+    # error under 'Stop', even when redirected; the checks judge exit codes instead.
+    $ErrorActionPreference = 'Continue'
+
     Write-Host "==> Pre-flight checks" -ForegroundColor Cyan
 
     # Windows: the release is a Windows service plus a WinForms tray app
@@ -229,7 +238,7 @@ function Invoke-PreflightChecks {
     # uncommitted changes: the release would not match any commit
     $git = Get-Command git -ErrorAction SilentlyContinue
     $inRepo = $false
-    if ($git) { $inRepo = ((& git -C $root rev-parse --is-inside-work-tree 2>$null) -eq 'true') }
+    if ($git -and (Test-Path (Join-Path $root '.git'))) { $inRepo = ((& git -C $root rev-parse --is-inside-work-tree 2>$null) -eq 'true') }
     if (-not $inRepo) {
         Pass "not a git clone (source zip): skipping the uncommitted-changes check"
     } else {

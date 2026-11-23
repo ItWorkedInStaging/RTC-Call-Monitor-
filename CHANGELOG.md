@@ -7,7 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [2.5.1] - 2026-11-24
 
 ### Added
-- `build-release.ps1` 1.1.0 pre-flight checks before anything is built: Windows; the .NET 10 SDK and the .NET 10 runtimes (the desktop runtime is a warning only); a `global.json` that pins another SDK; an enabled NuGet source; package restore; every `Microsoft.Extensions.*` package on 10.x (catches an accidental .NET 11 package); packages with known vulnerabilities; uncommitted changes (warning). New switches: `-CheckOnly` (checks only) and `-SkipChecks`.
+- `build-release.ps1` pre-flight checks before anything is built, installing what is missing:
+  - Windows, and a source folder with every part of the release (an older clone without the tray app or installer is reported).
+  - The .NET 10 SDK and .NET 10 Desktop Runtime: installed with winget when missing.
+  - An enabled NuGet source: nuget.org is added or enabled when there is none.
+  - A `global.json` pinning another SDK; package restore; every `Microsoft.Extensions.*` package on 10.x (catches an accidental .NET 11 package); packages with known vulnerabilities; uncommitted changes (warning, skipped outside a git clone).
+  - Switches: `-CheckOnly` (checks only), `-SkipChecks`, `-NoInstall` (report instead of installing).
+
+### Fixed
+- `build-release.ps1` 1.2.1 and `Install.ps1` 1.0.1: in Windows PowerShell 5.1, a program writing to its error output (git outside a clone, dotnet warnings) stopped the script; the checks now go by exit codes.
 
 ## [2.5.0] - 2026-11-23
 

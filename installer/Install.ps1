@@ -1,6 +1,8 @@
 # Install.ps1
-# Version: 1.0.0
+# Version: 1.0.1
 # Changelog:
+#   1.0.1 - .NET runtime check: dotnet writing to stderr no longer counts as
+#           "runtime missing" in Windows PowerShell 5.1.
 #   1.0.0 - Initial version. Installs or upgrades RTC Call Monitor from a release
 #           folder: checks the .NET 10 runtimes, stops the running service and
 #           tray, copies the files (keeping appsettings.Local.json, providers\auto
@@ -37,6 +39,7 @@ function Test-Admin {
 }
 
 function Test-DotNetRuntimes {
+    $ErrorActionPreference = 'Continue'   # see build-release.ps1 1.2.1
     $list = @()
     try { $list = & dotnet --list-runtimes 2>$null } catch { }
     $core    = $list | Where-Object { $_ -match '^Microsoft\.NETCore\.App 10\.' }
