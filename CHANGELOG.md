@@ -4,6 +4,11 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.5.1] - 2026-11-24
+
+### Added
+- `build-release.ps1` 1.1.0 pre-flight checks before anything is built: Windows; the .NET 10 SDK and the .NET 10 runtimes (the desktop runtime is a warning only); a `global.json` that pins another SDK; an enabled NuGet source; package restore; every `Microsoft.Extensions.*` package on 10.x (catches an accidental .NET 11 package); packages with known vulnerabilities; uncommitted changes (warning). New switches: `-CheckOnly` (checks only) and `-SkipChecks`.
+
 ## [2.5.0] - 2026-11-23
 
 ### Added

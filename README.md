@@ -244,7 +244,7 @@ For everyday use, install the monitor as a Windows service plus the tray app wit
 .\build-release.ps1
 ```
 
-This runs the tests, publishes both apps and creates `release\RtcCallMonitor-<version>\` and `release\RtcCallMonitor-<version>.zip`. Your `appsettings.Local.json` is never put into a release.
+It first runs pre-flight checks (Windows, .NET 10 SDK and runtimes, a NuGet source, package restore, all `Microsoft.Extensions.*` packages on 10.x, no known-vulnerable packages) and stops with the reason if one fails. `-CheckOnly` runs just the checks; `-SkipChecks` skips them. It then runs the tests, publishes both apps and creates `release\RtcCallMonitor-<version>\` and `release\RtcCallMonitor-<version>.zip`. Your `appsettings.Local.json` is never put into a release.
 
 **2. Install or upgrade:** double-click **`Install.cmd`** in that folder (or in the extracted zip). It asks for administrator rights once (UAC), then:
 
