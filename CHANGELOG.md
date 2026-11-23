@@ -4,6 +4,14 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.1.1] - 2026-11-23
+
+### Changed
+- README rewritten for the current version: how it works, quick start, Home Assistant entities and an example automation, settings reference, running as a Windows service, troubleshooting (call not detected, MQTT "not authorised", common messages), self-hosted PBXs such as 3CX, and project layout.
+
+### Fixed
+- `appsettings.Local.example.json` is no longer included in `dotnet publish` output.
+
 ## [2.1.0] - 2026-11-23
 
 ### Added

@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <Version>2.1.0</Version>
+    <Version>2.1.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,6 +18,6 @@
     <None Include="providers\*.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- personal settings (git-ignored); copied so a published/service install picks them up -->
     <Content Update="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Update="appsettings.Local.example.json" CopyToOutputDirectory="Never" />
+    <Content Update="appsettings.Local.example.json" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
   </ItemGroup>
 </Project>
