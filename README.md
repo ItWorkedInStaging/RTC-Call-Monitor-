@@ -313,13 +313,15 @@ C:\ProgramData\RtcCallMonitor\logs\rtc-call-monitor-20261123.log
 
 `RtcCallMonitor.Tray` is a small helper in the notification area. It talks to the running monitor (service or `dotnet run`) over a local named pipe; closing it doesn't stop detection.
 
+The icon is a headset in the Windows 11 style, white on a dark taskbar and black on a light one, like the OneDrive and other Microsoft 365 icons. A small badge in the corner shows the status:
+
 | Icon | Meaning |
 |---|---|
-| Green dot | Watching, no call |
+| Headset, no badge | Watching, no call |
 | Red dot | On a call (tooltip shows provider and minutes) |
-| Amber with ‖ | Detection paused |
-| Orange with ! | Watching, but something needs attention (MQTT not connected, no network connection captured, no output enabled) |
-| Grey ring | Monitor not running |
+| Grey badge with ‖ | Detection paused |
+| Amber badge with ! | Watching, but something needs attention (MQTT not connected, no network connection captured, no output enabled) |
+| Dimmed headset | Monitor not running |
 
 Left-click shows the status (connections captured, MQTT/webhook). The right-click menu has:
 

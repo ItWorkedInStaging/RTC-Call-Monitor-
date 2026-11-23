@@ -1,6 +1,8 @@
 // TrayContext.cs
-// Version: 1.2.0
+// Version: 1.3.0
 // Changelog:
+//   1.3.0 - Windows 11 style status icons (TrayIcons 2.0.0) drawn at the exact
+//           tray size; redrawn when the taskbar switches light/dark.
 //   1.2.0 - "Settings..." opens the settings window (settings\ folder next to
 //           tray\). "Open config folder" removed: the config folder is now
 //           locked to administrators (it holds the MQTT password).
@@ -36,6 +38,7 @@ namespace RtcCallMonitor.Tray
         private readonly ContextMenuStrip _menu = new ContextMenuStrip();
         private readonly Timer _timer = new Timer();
         private readonly System.Collections.Generic.Dictionary<TrayState, Icon> _icons = new System.Collections.Generic.Dictionary<TrayState, Icon>();
+        private TrayState _iconState = TrayState.Offline;
 
         private readonly ToolStripMenuItem _statusItem = new ToolStripMenuItem { Enabled = false };
         private readonly ToolStripMenuItem _problemsItem = new ToolStripMenuItem { Enabled = false, Visible = false };
@@ -128,6 +131,7 @@ namespace RtcCallMonitor.Tray
             var state = StateOf(_last);
             if (state != _shown)
             {
+                _iconState = state;
                 _icon.Icon = IconFor(state);
                 _shown = state;
             }
@@ -352,7 +356,9 @@ namespace RtcCallMonitor.Tray
         {
             if (!_icons.TryGetValue(state, out var icon))
             {
-                icon = TrayIcons.For(state, SystemInformation.SmallIconSize.Width * 2 > 32 ? 32 : Math.Max(16, SystemInformation.SmallIconSize.Width));
+                // the tray shows small icons (16 px at 100 %, 20 at 125 %, 24 at 150 %, 32 at 200 %): draw that size exactly
+                var size = Math.Max(16, SystemInformation.SmallIconSize.Width);
+                icon = TrayIcons.For(state, size, TrayTheme.IsDark() && !SystemInformation.HighContrast);
                 _icons[state] = icon;
             }
             return icon;
@@ -366,6 +372,12 @@ namespace RtcCallMonitor.Tray
             if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Color)
             {
                 TrayTheme.Apply(_menu);
+
+                // the glyph colour follows the taskbar: redraw
+                var old = new System.Collections.Generic.List<Icon>(_icons.Values);
+                _icons.Clear();
+                _icon.Icon = IconFor(_iconState);
+                foreach (var i in old) i.Dispose();
             }
         }
 
