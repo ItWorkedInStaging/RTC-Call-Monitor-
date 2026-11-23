@@ -20,15 +20,15 @@ It only looks at packet counts and IP addresses: it never reads call content. Ca
 
 | Provider | File | Source of the ranges |
 |---|---|---|
-| Microsoft Teams | `msteams.txt` | [Microsoft 365 URLs and IP ranges](https://learn.microsoft.com/en-us/microsoft-365/enterprise/urls-and-ip-address-ranges) (ID 11, Optimize Required) |
-| Zoom | `zoom.txt` | [ZoomMeetings.txt](https://assets.zoom.us/docs/ipranges/ZoomMeetings.txt) |
+| Microsoft Teams | `msteams.txt` | [Microsoft 365 IP web service](https://learn.microsoft.com/en-us/microsoft-365/enterprise/microsoft-365-ip-web-service) (Teams media, Optimize category). **Updated automatically** |
+| Zoom | `zoom.txt` | [ZoomMeetings.txt](https://assets.zoom.us/docs/ipranges/ZoomMeetings.txt). **Updated automatically** |
 | Webex | `webex.txt` | Original project config |
-| Google Meet | `googlemeet.txt` | Original project config |
-| GoTo Meeting | `gotomeeting.txt` | Original project config |
+| Google Meet | `googlemeet.txt` | [Prepare your network for Meet](https://support.google.com/a/answer/1279090) (Workspace and personal accounts) |
+| GoTo Meeting | `gotomeeting.txt` | Original project config plus [GoTo's published media ranges](https://support.goto.com/meeting/help/minimal-firewall-settings-for-the-goto-app) |
 | Slack | `slack.txt` | Original project config |
 | Discord | `discord.txt` | Original project config |
 
-Other providers can be added with a text file; see [Providers](#providers).
+Other providers can be added with a text file; see [Providers](#providers). Changes to the files are picked up while the monitor is running.
 
 **Self-hosted phone systems (3CX, FreePBX, ...)**: call media goes to *your own* PBX or media server rather than to a vendor's network, so it is not covered by the files above. Add your PBX's public IP to a new file such as `providers/3cx.txt` (see [Call not detected](#call-not-detected) for how to find it).
 
@@ -202,6 +202,28 @@ Each file in `src/providers` is one provider, and the file name is the provider 
 
 To add a provider, add a file. `Providers.Directory` sets a different folder, and `Providers.Inline` adds ranges from config (`{ "zoom": [ "203.0.113.0/24" ] }`).
 
+**Live reload:** adding, editing or deleting a file in `providers` (or `providers/auto`) is picked up about 2 seconds later, without a restart. If the changed file has an error, the log lists it and the previous ranges stay in use.
+
+#### Automatic updates
+
+Teams and Zoom publish their IP lists in a machine-readable form, so the monitor downloads them at startup (after 10 seconds) and then every `IntervalHours`:
+
+```json
+"Providers": {
+  "AutoUpdate": { "Enabled": true, "IntervalHours": 24 }
+}
+```
+
+| Provider | Downloaded from |
+|---|---|
+| `msteams` | Microsoft 365 IP web service, `endpoints.office.com` (Skype/Teams service area, Optimize category). The version is checked first, so the full list is only fetched when Microsoft publishes a new one. |
+| `zoom` | `https://assets.zoom.us/docs/ipranges/ZoomMeetings.txt` |
+
+- Downloaded lists are saved in `providers/auto/` (git-ignored) and **replace** the bundled file for that provider. Delete a file there to go back to the bundled list.
+- A download is only used if every line is a valid range, it isn't empty, and it isn't less than half the size of the previous download. Otherwise the log explains why and the current list stays in use. Network errors are logged as warnings and also keep the current list.
+- The Microsoft web service needs a client ID; a random one is created once and kept in `providers/auto/update-state.json`.
+- Set `Enabled` to `false` to use only the bundled files.
+
 Long vendor lists can be merged into fewer ranges with the helper script (needs Python and `pip install -r requirements.txt`):
 
 ```powershell
@@ -255,7 +277,9 @@ Add the network to the right provider file (for example `66.77.0.0/16` in `provi
 | Message | Meaning |
 |---|---|
 | `Neither Webhook nor Mqtt is enabled` | Calls are only logged; enable an output |
-| `'202.173.24.0/20' is not a network address, using 202.173.16.0/20` | A range in a provider file has host bits set; it still works, but the file should be corrected |
+| `provider list zoom could not be downloaded: ...; keeping the current list` | No internet, or the vendor's site is down; detection carries on with the current list |
+| `provider files have 1 problem(s); still using the previous ranges` | A provider file you edited has a mistake; fix it and save again |
+| `'... ' is not a network address, using ...` | A range in a provider file has host bits set; it still works, but the file should be corrected |
 | `Packet capture currently requires Windows` | Running on Linux/macOS (or in Docker), which isn't supported |
 | `An attempt was made to access a socket in a way forbidden` | Not running as administrator |
 
@@ -266,7 +290,8 @@ src/
   CallDetector.cs           start/end logic (no dependencies, unit-tested)
   NetworkListener.cs        raw socket capture
   TrafficMonitor.cs         ties capture to the detector
-  ProviderCatalog.cs        loads providers/*.txt, IP → provider lookup
+  ProviderCatalog.cs        loads providers/*.txt (+ auto/), IP → provider lookup, live reload
+  ProviderUpdates/          Teams/Zoom list downloads, file watcher
   NetworkParser.cs          CIDR parsing
   Configuration/            settings classes, validation, old-config translation
   Notifications/            webhook and MQTT outputs, HA discovery

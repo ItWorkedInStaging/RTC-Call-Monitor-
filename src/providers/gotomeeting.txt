@@ -1,7 +1,9 @@
 # gotomeeting.txt - UDP media ranges for gotomeeting
 # One CIDR range per line; anything after # is a comment.
-# Source: carried over from the original project config
-# Note: 202.173.24.0/20 is not a network address; it is read as 202.173.16.0/20.
+# Sources: original project config, plus the media/TURN ranges GoTo publishes in
+#   https://support.goto.com/meeting/help/minimal-firewall-settings-for-the-goto-app
+#   (68.64.0.0/19, 173.199.0.0/18, 78.108.124.0/23, 202.173.24.0/21, 23.239.224.0/19)
+# 202.173.24.0/21 was listed as 202.173.24.0/20 (not a network address) in the original config.
 
 216.115.208.0/20
 216.219.112.0/20
@@ -9,7 +11,7 @@
 66.151.150.160/27
 66.151.115.128/26
 64.74.80.0/24
-202.173.24.0/20
+202.173.24.0/21
 67.217.64.0/19
 78.108.112.0/20
 68.64.0.0/19
@@ -38,3 +40,4 @@
 173.199.30.0/23
 212.118.234.0/24
 216.219.114.0/23
+23.239.224.0/19

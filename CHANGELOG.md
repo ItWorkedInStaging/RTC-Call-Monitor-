@@ -4,6 +4,19 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-11-23
+
+### Added
+- **Automatic provider list updates** (`Providers.AutoUpdate`, on by default, every 24 hours): Teams ranges from the Microsoft 365 IP web service (only downloaded when Microsoft publishes a new version) and Zoom ranges from `ZoomMeetings.txt`, saved in `providers/auto/` (git-ignored) where they replace the bundled list for that provider.
+- Safety checks for downloads: a list with invalid lines, no ranges, or less than half the ranges of the previous download is rejected, and network errors keep the current list.
+- **Live reload of provider files**: changes in `providers/` and `providers/auto/` are picked up within about 2 seconds without a restart; a file with errors is reported and the previous ranges stay in use.
+- The startup log shows which file each provider's ranges came from.
+- 14 more tests (62 in total) for the feed parsers, the updater (against a fake server) and reloading.
+
+### Changed
+- Google Meet: added the ranges Google publishes for personal-account calls (`142.250.82.0/24`) and the IPv6 media ranges.
+- GoTo Meeting: corrected `202.173.24.0/20` to `202.173.24.0/21` and added `23.239.224.0/19`, both from GoTo's published media/TURN ranges.
+
 ## [2.1.1] - 2026-11-23
 
 ### Changed

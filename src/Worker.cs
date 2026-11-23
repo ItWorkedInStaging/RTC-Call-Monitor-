@@ -1,6 +1,8 @@
 // Worker.cs
-// Version: 2.0.0
+// Version: 2.1.0
 // Changelog:
+//   2.1.0 - Startup log shows where each provider's ranges came from; checks
+//           the Providers:AutoUpdate settings.
 //   2.0.0 - Validates config at startup and exits with clear errors; sends call
 //           events to every enabled notifier (webhook, MQTT); starts and stops
 //           notifiers with the service; logs provider/config warnings.
@@ -35,6 +37,7 @@ namespace RtcCallMonitor
         private readonly DetectionOptions _detection;
         private readonly WebhookOptions _webhook;
         private readonly MqttOptions _mqtt;
+        private readonly ProvidersOptions _providersOptions;
         private readonly List<ICallNotifier> _notifiers;
 
         public Worker(
@@ -46,6 +49,7 @@ namespace RtcCallMonitor
             IOptions<DetectionOptions> detection,
             IOptions<WebhookOptions> webhook,
             IOptions<MqttOptions> mqtt,
+            IOptions<ProvidersOptions> providersOptions,
             IEnumerable<ICallNotifier> notifiers)
         {
             _host = host;
@@ -56,6 +60,7 @@ namespace RtcCallMonitor
             _detection = detection.Value;
             _webhook = webhook.Value;
             _mqtt = mqtt.Value;
+            _providersOptions = providersOptions.Value;
             _notifiers = notifiers.Where(n => n.Enabled).ToList();
         }
 
@@ -65,6 +70,7 @@ namespace RtcCallMonitor
             foreach (var warning in _providers.Warnings) _logger.LogWarning(warning);
 
             var errors = ConfigValidator.Validate(_detection, _webhook, _mqtt);
+            errors.AddRange(ConfigValidator.ValidateProviders(_providersOptions));
             errors.AddRange(_providers.Errors);
             if (errors.Count > 0)
             {
@@ -77,7 +83,8 @@ namespace RtcCallMonitor
 
             foreach (var provider in _providers.Networks.OrderBy(p => p.Key))
             {
-                _logger.LogInformation("loaded provider {Provider}, {Count} network prefixes", provider.Key, provider.Value.Length);
+                _providers.Sources.TryGetValue(provider.Key, out var source);
+                _logger.LogInformation("loaded provider {Provider}, {Count} network prefixes from {Source}", provider.Key, provider.Value.Length, source);
             }
 
             if (_notifiers.Count == 0)

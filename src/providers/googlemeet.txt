@@ -1,5 +1,12 @@
 # googlemeet.txt - UDP media ranges for googlemeet
 # One CIDR range per line; anything after # is a comment.
-# Source: carried over from the original project config
+# Source: https://support.google.com/a/answer/1279090 (Prepare your network for Meet)
+#   Workspace media: 74.125.250.0/24, 74.125.247.128/32 (inside 74.125.240.0/20 below),
+#   2001:4860:4864:5::/64, 2001:4860:4864:4:8000::/128
+#   Consumer (personal Google accounts) media: 142.250.82.0/24, 2001:4860:4864:6::/64
 
 74.125.240.0/20
+142.250.82.0/24
+2001:4860:4864:5::/64
+2001:4860:4864:4:8000::/128
+2001:4860:4864:6::/64

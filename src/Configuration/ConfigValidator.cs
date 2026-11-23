@@ -1,6 +1,7 @@
 // ConfigValidator.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - ValidateProviders: Providers:AutoUpdate:IntervalHours.
 //   1.0.0 - Initial version. Startup checks for the Detection, Webhook and
 //           Mqtt sections, returning plain-language error messages.
 
@@ -62,6 +63,17 @@ namespace RtcCallMonitor.Configuration
                 }
             }
 
+            return errors;
+        }
+
+        /// <summary>Checks the Providers section (the ranges themselves are checked by ProviderCatalog).</summary>
+        public static List<string> ValidateProviders(ProvidersOptions providers)
+        {
+            var errors = new List<string>();
+            if (providers.AutoUpdate != null && providers.AutoUpdate.Enabled && providers.AutoUpdate.IntervalHours < 1)
+            {
+                errors.Add("Providers.AutoUpdate.IntervalHours must be at least 1.");
+            }
             return errors;
         }
 

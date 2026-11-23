@@ -353,3 +353,4 @@ src/appsettings.Development.json
 # RTC-Call-Monitor local files
 src/appsettings.Local.json
 .nugetcache/
+src/providers/auto/

@@ -1,6 +1,7 @@
 // Program.cs
-// Version: 2.0.0
+// Version: 2.1.0
 // Changelog:
+//   2.1.0 - Registers the provider auto-update and provider file watcher services.
 //   2.0.0 - Config layers: appsettings.json, appsettings.{Environment}.json,
 //           appsettings.Local.json (git-ignored), RTCMON_ environment variables,
 //           command line; old-style settings translated by LegacyConfig.
@@ -17,6 +18,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RtcCallMonitor.Configuration;
 using RtcCallMonitor.Notifications;
+using RtcCallMonitor.ProviderUpdates;
 
 namespace RtcCallMonitor
 {
@@ -79,6 +81,8 @@ namespace RtcCallMonitor
                     services.AddSingleton<ICallNotifier, MqttNotifier>();
 
                     services.AddHostedService<Worker>();
+                    services.AddHostedService<ProviderFileWatcher>();
+                    services.AddHostedService<ProviderUpdateService>();
                 })
                 .UseWindowsService();
         }

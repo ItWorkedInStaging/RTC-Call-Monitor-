@@ -1,6 +1,7 @@
 // Options.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Providers.AutoUpdate settings (Enabled, IntervalHours).
 //   1.0.0 - Initial version. Settings classes for the 2.1 config layout:
 //           Detection, Providers, Webhook and Mqtt sections.
 
@@ -40,6 +41,18 @@ namespace RtcCallMonitor.Configuration
 
         /// <summary>Extra ranges per provider, merged with the files (also used for old-format configs).</summary>
         public Dictionary<string, string[]> Inline { get; set; } = new Dictionary<string, string[]>();
+
+        /// <summary>Download official lists (Teams, Zoom) into &lt;Directory&gt;/auto.</summary>
+        public ProviderAutoUpdateOptions AutoUpdate { get; set; } = new ProviderAutoUpdateOptions();
+    }
+
+    /// <summary>"Providers:AutoUpdate": automatic download of published provider IP lists.</summary>
+    public class ProviderAutoUpdateOptions
+    {
+        public bool Enabled { get; set; } = true;
+
+        /// <summary>Hours between checks (minimum 1).</summary>
+        public int IntervalHours { get; set; } = 24;
     }
 
     /// <summary>"Webhook" section: HTTP POST on call start/end.</summary>
