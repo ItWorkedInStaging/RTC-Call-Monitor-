@@ -1,6 +1,8 @@
 # Install.ps1
-# Version: 1.0.1
+# Version: 1.0.2
 # Changelog:
+#   1.0.2 - Started from the source folder instead of a release: points to the
+#           built release's Install.cmd, or says to run build-release.ps1 first.
 #   1.0.1 - .NET runtime check: dotnet writing to stderr no longer counts as
 #           "runtime missing" in Windows PowerShell 5.1.
 #   1.0.0 - Initial version. Installs or upgrades RTC Call Monitor from a release
@@ -38,6 +40,20 @@ function Test-Admin {
     return (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Get-NotAReleaseMessage($appSrc) {
+    # started from the source folder (repository) rather than a built release?
+    if (Test-Path (Join-Path $PackageRoot 'src\RtcCallMonitor.csproj')) {
+        $latest = Get-ChildItem -Path (Join-Path $PackageRoot 'release') -Directory -Filter 'RtcCallMonitor-*' -ErrorAction SilentlyContinue |
+                  Where-Object { Test-Path (Join-Path $_.FullName 'app\RtcCallMonitor.exe') } |
+                  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($latest) {
+            return "This is the source folder, not a release. Run the built release instead: $(Join-Path $latest.FullName 'Install.cmd')"
+        }
+        return "This is the source folder, not a release. Build one first with .\build-release.ps1 (in $PackageRoot), then run release\RtcCallMonitor-<version>\Install.cmd."
+    }
+    return "RtcCallMonitor.exe not found in $appSrc. Run Install.cmd from the extracted release folder."
+}
+
 function Test-DotNetRuntimes {
     $ErrorActionPreference = 'Continue'   # see build-release.ps1 1.2.1
     $list = @()
@@ -61,7 +77,7 @@ function Install-Elevated {
     $appSrc  = Join-Path $PackageRoot 'app'
     $traySrc = Join-Path $PackageRoot 'tray'
     if (-not (Test-Path (Join-Path $appSrc 'RtcCallMonitor.exe'))) {
-        throw "RtcCallMonitor.exe not found in $appSrc. Run Install.cmd from the extracted release folder."
+        throw (Get-NotAReleaseMessage $appSrc)
     }
 
     $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -187,6 +203,11 @@ Write-Host "RTC Call Monitor - install / upgrade" -ForegroundColor White
 Write-Host "Package: $PackageRoot"
 Write-Host "Target:  $InstallDir"
 Write-Host ""
+
+if (-not (Test-Path (Join-Path $PackageRoot 'app\RtcCallMonitor.exe'))) {
+    Write-Host (Get-NotAReleaseMessage (Join-Path $PackageRoot 'app')) -ForegroundColor Red
+    exit 1
+}
 
 Write-Step "Checking the .NET 10 runtimes"
 $rt = Test-DotNetRuntimes
