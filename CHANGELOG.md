@@ -4,6 +4,26 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-23
+
+### Added
+- **MQTT output with Home Assistant discovery** (`Mqtt` section): a device with `On call` (binary sensor, with provider/ip/started attributes), `Call provider` and `Last call duration` entities. All topics are retained; availability uses a Last Will so entities go unavailable if the app stops or crashes. Discovery is re-sent when Home Assistant restarts, and the app reconnects with backoff (5-60 s) when the broker is unreachable. Username/password and optional TLS. Uses MQTTnet 5.2.
+- MQTT and webhooks are switched on separately with `Enabled`; both can run together, or neither (log only).
+- Webhook `Headers` setting for authentication tokens.
+- `appsettings.Local.json` (git-ignored) for personal settings and secrets, plus `appsettings.Local.example.json` as a template. `RTCMON_` environment variables and command-line arguments also override settings.
+- Startup validation: every config problem is listed in plain language and the app exits with code 2.
+- Unit tests for provider files, config translation, validation and MQTT topics/discovery (48 tests in total).
+
+### Changed
+- **New config layout**: `Detection`, `Providers`, `Webhook` and `Mqtt` sections replace `Application` and `Provider`. Old configs still work and log a warning asking you to migrate.
+- Provider IP ranges moved from `appsettings.json` into one text file per provider in `src/providers` (one CIDR per line, `#` comments). Problems are reported with file name and line number.
+- `CheckInterval` renamed `CheckIntervalMs`; `LocalNetwork` renamed `LocalNetworks`; `CallStartWebhook`/`CallEndWebhook` renamed `Webhook.CallStartUrl`/`CallEndUrl`.
+- Console log lines are single-line with a timestamp (was systemd format).
+
+### Fixed
+- Shorthand IPv4 ranges such as `3.7.35/25` are now rejected. .NET reads `3.7.35` as `3.7.0.35`, so such a typo silently matched the wrong network.
+- An invalid `LocalNetworks` entry no longer crashes at startup with a raw exception; it is reported by the config check.
+
 ## [2.0.0] - 2026-11-23
 
 ### Changed

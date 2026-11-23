@@ -1,6 +1,7 @@
 // NetworkParserTests.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Shorthand IPv4 ranges ("3.7.35/25") are rejected.
 //   1.0.0 - Initial version. Valid, host-bits-set and invalid CIDR ranges.
 
 using System;
@@ -38,6 +39,8 @@ namespace RtcCallMonitor.Tests
         [InlineData("192.168.1.0")]
         [InlineData("192.168.1.0/33")]
         [InlineData("not-an-ip/24")]
+        [InlineData("3.7.35/25")]
+        [InlineData("192.168.1/24")]
         public void InvalidRange_Throws(string cidr)
         {
             Assert.Throws<FormatException>(() => NetworkParser.Parse(cidr, out _));

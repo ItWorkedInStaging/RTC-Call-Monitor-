@@ -4,10 +4,20 @@
     <TargetFramework>net10.0</TargetFramework>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <Version>2.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.0" />
+    <PackageReference Include="MQTTnet" Version="5.2.0.1603" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- provider IP range files are read at runtime from the app folder -->
+    <None Include="providers\*.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- personal settings (git-ignored); copied so a published/service install picks them up -->
+    <Content Update="appsettings.Local.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Update="appsettings.Local.example.json" CopyToOutputDirectory="Never" />
   </ItemGroup>
 </Project>

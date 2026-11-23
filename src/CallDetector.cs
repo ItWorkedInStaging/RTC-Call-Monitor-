@@ -1,6 +1,7 @@
 // CallDetector.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - CallStarted events carry StartedAt (first interval with call traffic).
 //   1.0.0 - Initial version. Thread-safe packet counters and the call start/end
 //           state machine moved out of TrafficMonitor, with fixes for the
 //           inbound/outbound comparison, start/end debouncing, matching an
@@ -29,6 +30,9 @@ namespace RtcCallMonitor
         public string Provider { get; init; }
         public int PacketCount { get; init; }
         public TimeSpan Duration { get; init; }
+
+        /// <summary>For CallStarted: when call traffic was first seen.</summary>
+        public DateTimeOffset StartedAt { get; init; }
     }
 
     /// <summary>
@@ -215,7 +219,8 @@ namespace RtcCallMonitor
                     Type = CallEventType.CallStarted,
                     Ip = bestIp,
                     Provider = bestProvider,
-                    PacketCount = bestRate
+                    PacketCount = bestRate,
+                    StartedAt = _callStart
                 });
             }
         }

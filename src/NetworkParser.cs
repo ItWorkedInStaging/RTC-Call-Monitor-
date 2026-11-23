@@ -1,6 +1,8 @@
 // NetworkParser.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Reject shorthand IPv4 such as "3.7.35/25", which .NET would read as
+//           3.7.0.35 and silently turn into the wrong network.
 //   1.0.0 - Initial version. Wraps System.Net.IPNetwork parsing (replaces the
 //           IPNetwork2 package) and reports ranges whose address has host bits
 //           set, e.g. "192.168.1.100/24", which are silently widened to the
@@ -29,7 +31,15 @@ namespace RtcCallMonitor
                 throw new FormatException($"'{cidr}' is not a valid CIDR range (expected e.g. 192.168.1.0/24).");
             }
 
-            var givenAddress = IPAddress.Parse(value.Substring(0, value.IndexOf('/')));
+            var addressText = value.Substring(0, value.IndexOf('/'));
+            var givenAddress = IPAddress.Parse(addressText);
+
+            // IPAddress.Parse accepts inet_aton shorthand ("10.1/8" = 10.0.0.1); require a.b.c.d
+            if (givenAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                addressText.Split('.').Length != 4)
+            {
+                throw new FormatException($"'{cidr}' is not a valid CIDR range: IPv4 addresses need all four parts (e.g. 3.7.35.0/25).");
+            }
             if (!givenAddress.Equals(network.BaseAddress))
             {
                 corrected = network.ToString();

@@ -1,0 +1,5 @@
+# slack.txt - UDP media ranges for slack
+# One CIDR range per line; anything after # is a comment.
+# Source: carried over from the original project config
+
+99.77.0.0/16

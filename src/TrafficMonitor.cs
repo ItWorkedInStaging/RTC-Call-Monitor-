@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RtcCallMonitor.Configuration;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -14,49 +13,33 @@ namespace RtcCallMonitor
 {
     public class TrafficMonitor
     {
-        private readonly Dictionary<string, IPNetwork[]> _knownNetworks = new();
-        private readonly ConcurrentDictionary<string, string> _providerCache = new();
+        private readonly ProviderCatalog _providers;
         private readonly CallDetector _detector;
         private readonly ILogger<TrafficMonitor> _logger;
-        private readonly IOptions<Application> _appConfig;
+        private readonly DetectionOptions _detection;
         private NetworkListener _listener;
         private IPAddress _ipAddress = IPAddress.Loopback;
 
         public delegate void UnknownNetwork(string ip, int packetCount);
-        public delegate void CallStart(string ip, string provider, int packetCount);
+        public delegate void CallStart(string ip, string provider, int packetCount, DateTimeOffset startedAt);
         public delegate void CallEnd(string provider, TimeSpan ts);
 
         public event UnknownNetwork OnUnknownProvider;
         public event CallStart OnCallStarted;
         public event CallEnd OnCallEnded;
 
-        public TrafficMonitor(ILogger<TrafficMonitor> logger, NetworkListener listener, IOptions<Provider> config, IOptions<Application> appConfig)
+        public TrafficMonitor(ILogger<TrafficMonitor> logger, NetworkListener listener, ProviderCatalog providers, IOptions<DetectionOptions> detection)
         {
             _logger = logger;
             _listener = listener;
-            _appConfig = appConfig;
-
-            // build known networks for each defined call provider
-            foreach (var network in config.Value.KnownNetworks)
-            {
-                var cidrList = new List<IPNetwork>();
-                foreach (var cidr in network.Value)
-                {
-                    cidrList.Add(NetworkParser.Parse(cidr, out var corrected));
-                    if (corrected != null)
-                    {
-                        _logger.LogWarning($"provider {network.Key}: '{cidr}' is not a network address, using {corrected}");
-                    }
-                }
-                _knownNetworks.Add(network.Key, cidrList.ToArray());
-                _logger.LogInformation($"loaded provider {network.Key}, {network.Value.Length} network prefixes");
-            }
+            _providers = providers;
+            _detection = detection.Value;
 
             _detector = new CallDetector(
-                LookupProvider,
-                _appConfig.Value.MinPacketRate ?? 1,
-                _appConfig.Value.CallStartIntervals ?? 2,
-                _appConfig.Value.CallEndIntervals ?? 3);
+                _providers.Lookup,
+                _detection.MinPacketRate,
+                _detection.CallStartIntervals,
+                _detection.CallEndIntervals);
         }
 
         public void Start()
@@ -80,7 +63,7 @@ namespace RtcCallMonitor
         private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
         {
             _logger.LogInformation($"network changed!");
-            Thread.Sleep(_appConfig.Value.CheckInterval ?? 1000);
+            Thread.Sleep(_detection.CheckIntervalMs);
             IPAddress newIpAddress = IPAddress.Loopback;
             try
             {
@@ -125,26 +108,13 @@ namespace RtcCallMonitor
                         OnUnknownProvider?.Invoke(e.Ip, e.PacketCount);
                         break;
                     case CallEventType.CallStarted:
-                        OnCallStarted?.Invoke(e.Ip, e.Provider, e.PacketCount);
+                        OnCallStarted?.Invoke(e.Ip, e.Provider, e.PacketCount, e.StartedAt);
                         break;
                     case CallEventType.CallEnded:
                         OnCallEnded?.Invoke(e.Provider, e.Duration);
                         break;
                 }
             }
-        }
-
-        private string LookupProvider(string ip)
-        {
-            return _providerCache.GetOrAdd(ip, key =>
-            {
-                if (!IPAddress.TryParse(key, out var address)) return null;
-                foreach (var provider in _knownNetworks)
-                {
-                    if (provider.Value.Any(n => n.Contains(address))) return provider.Key;
-                }
-                return null;
-            });
         }
     }
 }

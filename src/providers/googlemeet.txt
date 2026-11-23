@@ -1,0 +1,5 @@
+# googlemeet.txt - UDP media ranges for googlemeet
+# One CIDR range per line; anything after # is a comment.
+# Source: carried over from the original project config
+
+74.125.240.0/20

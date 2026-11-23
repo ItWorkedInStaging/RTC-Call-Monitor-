@@ -1,0 +1,12 @@
+# msteams.txt - UDP media ranges for msteams
+# One CIDR range per line; anything after # is a comment.
+# Source: https://learn.microsoft.com/en-us/microsoft-365/enterprise/urls-and-ip-address-ranges (ID 11, Optimize Required)
+
+13.107.64.0/18
+52.112.0.0/14
+52.122.0.0/15
+2603:1063::/39
+52.120.0.0/16
+52.114.0.0/16
+52.113.0.0/16
+52.115.0.0/16

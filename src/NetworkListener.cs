@@ -18,7 +18,7 @@ namespace RtcCallMonitor
         private byte[] _buffer = new byte[65507];  // max UDP packet size
 
         private readonly ILogger<NetworkListener> _logger;
-        private readonly IOptions<Application> _appConfig;
+        private readonly DetectionOptions _detection;
 
         public delegate void Notify(IPHeader ipHeader);
 
@@ -49,16 +49,23 @@ namespace RtcCallMonitor
             return s;
         }
 
-        public NetworkListener(ILogger<NetworkListener> logger, IOptions<Application> appConfig) {
+        public NetworkListener(ILogger<NetworkListener> logger, IOptions<DetectionOptions> detection) {
             _logger = logger;
-            _appConfig = appConfig;
+            _detection = detection.Value;
 
-            foreach (var network in _appConfig.Value.LocalNetwork)
+            foreach (var network in _detection.LocalNetworks)
             {
-                _localCIDR.Add(NetworkParser.Parse(network, out var corrected));
-                if (corrected != null)
+                try
                 {
-                    _logger.LogWarning($"LocalNetwork '{network}' is not a network address, using {corrected}");
+                    _localCIDR.Add(NetworkParser.Parse(network, out var corrected));
+                    if (corrected != null)
+                    {
+                        _logger.LogWarning($"LocalNetworks '{network}' is not a network address, using {corrected}");
+                    }
+                }
+                catch (FormatException)
+                {
+                    // reported by ConfigValidator at startup
                 }
             }
         }

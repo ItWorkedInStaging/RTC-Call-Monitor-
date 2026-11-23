@@ -1,6 +1,7 @@
 // CallDetectorTests.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - CallStarted carries StartedAt.
 //   1.0.0 - Initial version. Covers the round-1 fixes: inbound detection,
 //           start/end debouncing, relay IP switches, duration, unknown
 //           providers, threshold, provider switching and concurrent recording.
@@ -46,6 +47,15 @@ namespace RtcCallMonitor.Tests
             var d = new CallDetector(Lookup, 5, startIntervals: 2, endIntervals: 3);
             Assert.DoesNotContain(Tick(d, 0, "13.1.1.1", 50), e => e.Type == CallEventType.CallStarted);
             Assert.Single(Tick(d, 1, "13.1.1.1", 50), e => e.Type == CallEventType.CallStarted);
+        }
+
+        [Fact]
+        public void CallStarted_CarriesTimeOfFirstCallTraffic()
+        {
+            var d = new CallDetector(Lookup, 5, startIntervals: 2, endIntervals: 3);
+            Tick(d, 0, "13.1.1.1", 50);
+            var started = Assert.Single(Tick(d, 1, "13.1.1.1", 50));
+            Assert.Equal(T0, started.StartedAt);
         }
 
         [Fact]

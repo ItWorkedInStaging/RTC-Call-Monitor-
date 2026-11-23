@@ -1,0 +1,6 @@
+# discord.txt - UDP media ranges for discord
+# One CIDR range per line; anything after # is a comment.
+# Source: carried over from the original project config
+
+162.245.0.0/16
+213.179.0.0/16
