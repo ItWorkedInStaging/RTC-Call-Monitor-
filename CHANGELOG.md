@@ -4,6 +4,11 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.3.1] - 2026-11-23
+
+### Fixed
+- IPv6 packets were counted once per IPv6 address: Windows captures every packet of an adapter on each capture socket, and Wi-Fi usually has several IPv6 addresses (stable plus temporary). There is now one capture socket per connection and IP version; all of the connection's addresses still count as this PC's, and an existing socket is kept when Windows rotates its temporary addresses.
+
 ## [2.3.0] - 2026-11-23
 
 ### Added

@@ -1,6 +1,7 @@
 // CaptureTests.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - One capture socket per connection and IP version.
 //   1.0.0 - Initial version. IPv4/IPv6 packet parsing, interface selection
 //           (include/exclude patterns, address kinds, subnets) and the packet
 //           filter (direction, local networks, non-unicast).
@@ -127,6 +128,18 @@ namespace RtcCallMonitor.Tests
         {
             var targets = CaptureAddresses.Select(Pc, null, new[] { "NordLynx" }, captureIPv6: false);
             Assert.Equal(new[] { "10.69.199.37", "172.24.0.1", "192.168.56.1" }, targets.Select(t => t.Address.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void OneSocketPerInterfaceAndFamily_EvenWithSeveralIPv6Addresses()
+        {
+            var pc = new List<InterfaceInfo>
+            {
+                Nic("Wi-Fi", "Intel", ("10.69.199.37", 16), ("2001:db8:1::a", 64), ("2001:db8:1::b", 64), ("2001:db8:1::c", 64)),
+                Nic("NordLynx", "NordLynx Tunnel", ("10.5.0.2", 32)),
+            };
+            var sockets = CaptureAddresses.OnePerInterfaceAndFamily(CaptureAddresses.Select(pc, null, null, true));
+            Assert.Equal(new[] { "10.69.199.37", "2001:db8:1::a", "10.5.0.2" }, sockets.Select(t => t.Address.ToString()).ToArray());
         }
 
         private static PacketFilter Filter() => new PacketFilter(

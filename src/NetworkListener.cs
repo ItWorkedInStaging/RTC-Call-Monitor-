@@ -1,6 +1,10 @@
 ﻿// NetworkListener.cs
-// Version: 2.0.0
+// Version: 2.0.1
 // Changelog:
+//   2.0.1 - One capture socket per connection and IP version: SIO_RCVALL already
+//           delivers every packet of the adapter, so a socket per address counted
+//           IPv6 packets once per address (Windows gives Wi-Fi several IPv6
+//           addresses). All addresses still count as this PC's.
 //   2.0.0 - Captures on every selected local address at once (one raw socket
 //           each, IPv4 and IPv6) instead of a single IPv4 address; Refresh()
 //           opens/closes sockets as addresses come and go; local subnets come
@@ -89,11 +93,18 @@ namespace RtcCallMonitor
                 throw new PlatformNotSupportedException("Packet capture currently requires Windows (SIO_RCVALL is not available on this OS).");
             }
 
-            var wanted = CaptureAddresses.Select(
+            var selected = CaptureAddresses.Select(
                 InterfaceInfo.FromSystem(), _detection.Interfaces, _detection.ExcludeInterfaces, _detection.CaptureIPv6);
+            var wanted = CaptureAddresses.OnePerInterfaceAndFamily(selected);
 
             lock (_lock)
             {
+                // keep a socket while its address is still selected, even if another address would be picked first now
+                wanted = wanted.Select(w => _sockets.Values.Select(s => s.Target)
+                                  .FirstOrDefault(t => t.InterfaceName == w.InterfaceName &&
+                                                       t.Address.AddressFamily == w.Address.AddressFamily &&
+                                                       selected.Any(x => x.Address.Equals(t.Address))) ?? w).ToList();
+
                 foreach (var gone in _sockets.Keys.Where(a => wanted.All(w => !w.Address.Equals(a))).ToList())
                 {
                     _logger.LogInformation("stopped capturing on {Target}", _sockets[gone].Target);
@@ -117,8 +128,11 @@ namespace RtcCallMonitor
                     }
                 }
 
-                var localNetworks = _sockets.Values.Select(s => s.Target.Subnet).Concat(_configuredLocalNetworks).Distinct().ToList();
-                _filter = new PacketFilter(_sockets.Keys, localNetworks);
+                // every selected address is this PC's, also those that share a socket
+                var captured = selected.Where(t => _sockets.Values.Any(s => s.Target.InterfaceName == t.InterfaceName &&
+                                                                              s.Target.Address.AddressFamily == t.Address.AddressFamily)).ToList();
+                var localNetworks = captured.Select(t => t.Subnet).Concat(_configuredLocalNetworks).Distinct().ToList();
+                _filter = new PacketFilter(captured.Select(t => t.Address), localNetworks);
 
                 if (_sockets.Count == 0)
                 {

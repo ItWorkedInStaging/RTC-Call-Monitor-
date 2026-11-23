@@ -1,6 +1,7 @@
 // CaptureAddresses.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - OnePerInterfaceAndFamily: the address that gets the capture socket.
 //   1.0.0 - Initial version. Chooses which local addresses to capture on, from
 //           the PC's network interfaces and Detection.Interfaces /
 //           ExcludeInterfaces / CaptureIPv6, and works out the local subnets
@@ -102,6 +103,13 @@ namespace RtcCallMonitor.Capture
             }
             return result;
         }
+
+        /// <summary>
+        /// One address per connection and IP version, for the capture socket: the
+        /// first stable one (Windows lists permanent addresses before temporary ones).
+        /// </summary>
+        public static List<CaptureTarget> OnePerInterfaceAndFamily(IEnumerable<CaptureTarget> targets) =>
+            targets.GroupBy(t => (t.InterfaceName, t.Address.AddressFamily)).Select(g => g.First()).ToList();
 
         /// <summary>Case-insensitive wildcard match (* and ?) against the interface name or description.</summary>
         public static bool Matches(string pattern, InterfaceInfo nic)
