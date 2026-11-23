@@ -4,6 +4,22 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-11-24
+
+### Added
+- **Settings window** (`settings\RtcCallMonitor.Settings.exe`, WinUI 3), opened from the tray's new **Settings...** item. Pages: MQTT (with **Test connection**), Webhooks (with **Send test**), Detection, and Providers (auto-update, the lists in use, and your own lists such as `3cx`). **Save** needs no administrator rights: the monitor checks the settings, stores them and restarts itself.
+- Pipe protocol 2: `getSettings`, `saveSettings`, `testMqtt`, `testWebhook` and `restart`, accepted only from accounts in `editors.json` (the installer adds the user who ran it), elevated administrators and the monitor's own account.
+- Secrets are encrypted with Windows DPAPI (`"dpapi:..."`): the MQTT password and webhook headers such as `Authorization`. Plain values typed in by hand are encrypted when the service starts; the settings window never receives them.
+- A provider line can be a single address (`203.0.113.10` = `/32`, IPv6 `/128`).
+- `RTCMON_CONFIG_DIR` points the config folder somewhere else.
+
+### Changed
+- **Breaking:** your settings, your own provider lists and the downloaded lists move from `C:\Program Files\RtcCallMonitor` to the config folder `C:\ProgramData\RtcCallMonitor\config`, locked to SYSTEM and Administrators. `Install.ps1` 1.1.0 moves them on upgrade (a custom `providers\3cx.txt` included). An `appsettings.Local.json` left next to the program still applies, with a warning.
+- Your own provider lists add to a bundled or downloaded list of the same name instead of replacing it.
+- The tray's **Open config folder** is gone (the folder is locked); **Settings...** replaces it.
+- First install opens the settings window instead of Notepad. Uninstall keeps the config folder unless you choose to delete it.
+- `build-release.ps1` 1.3.0 publishes the settings window (`-NoSettingsApp` to leave it out).
+
 ## [2.6.0] - 2026-11-24
 
 ### Added

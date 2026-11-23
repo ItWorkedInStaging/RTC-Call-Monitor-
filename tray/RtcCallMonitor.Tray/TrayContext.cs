@@ -1,6 +1,9 @@
 // TrayContext.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - "Settings..." opens the settings window (settings\ folder next to
+//           tray\). "Open config folder" removed: the config folder is now
+//           locked to administrators (it holds the MQTT password).
 //   1.1.0 - Menu follows the Windows light/dark mode, and switches live.
 //   1.0.0 - Initial version. Tray icon and menu: status every 2 s from the
 //           monitor's pipe, pause/resume, open log/config/README, restart the
@@ -73,15 +76,18 @@ namespace RtcCallMonitor.Tray
             _restartItem.Click += (_, __) => RestartService();
             _startupItem.Click += (_, __) => ToggleStartup();
 
+            var settingsItem = new ToolStripMenuItem("Settings...", null, (_, __) => OpenSettings());
+            settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold);
+
             _menu.Items.Add(_statusItem);
             _menu.Items.Add(_problemsItem);
             _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(_pauseItem);
             _menu.Items.Add(_resumeItem);
             _menu.Items.Add(new ToolStripSeparator());
+            _menu.Items.Add(settingsItem);
             _menu.Items.Add("Open log file", null, (_, __) => OpenLogFile());
             _menu.Items.Add("Open log folder", null, (_, __) => OpenFolder(LogDirectory));
-            _menu.Items.Add("Open config folder", null, (_, __) => OpenConfigFolder());
             _menu.Items.Add("Open README", null, (_, __) => OpenReadme());
             _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(_restartItem);
@@ -266,22 +272,33 @@ namespace RtcCallMonitor.Tray
             Shell(latest.FullName);
         }
 
-        private void OpenConfigFolder()
+        private void OpenSettings()
         {
-            var dir = _last?.ConfigDirectory;
-            if (string.IsNullOrEmpty(dir))
+            var candidates = new[]
             {
-                MessageBox.Show("Start the monitor first: its config folder is only known while it runs.", "RTC Call Monitor", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Path.Combine(AppContext.BaseDirectory, "..", "settings", "RtcCallMonitor.Settings.exe"), // installed
+                Path.Combine(AppContext.BaseDirectory, "RtcCallMonitor.Settings.exe"),
+            };
+            var exe = candidates.Select(Path.GetFullPath).FirstOrDefault(File.Exists);
+            if (exe == null)
+            {
+                MessageBox.Show("The settings window is not installed (settings\\RtcCallMonitor.Settings.exe). Re-run Install.cmd from a release that includes it.",
+                    "RTC Call Monitor", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            var local = Path.Combine(dir, "appsettings.Local.json");
-            if (File.Exists(local)) Process.Start("explorer.exe", $"/select,\"{local}\"");
-            else OpenFolder(dir);
+            try
+            {
+                Process.Start(new ProcessStartInfo { FileName = exe, UseShellExecute = true });
+            }
+            catch (Exception e)
+            {
+                MessageBox.Show($"Could not open the settings window: {e.Message}", "RTC Call Monitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         private void OpenReadme()
         {
-            var dir = _last?.ConfigDirectory;
+            var dir = _last?.ProgramDirectory ?? _last?.ConfigDirectory;
             var candidates = new[]
             {
                 dir == null ? null : Path.Combine(dir, "README.md"),

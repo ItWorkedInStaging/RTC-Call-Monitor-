@@ -1,6 +1,7 @@
 // NetworkParserTests.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - A single address is accepted as a /32 or /128 range.
 //   1.1.0 - Shorthand IPv4 ranges ("3.7.35/25") are rejected.
 //   1.0.0 - Initial version. Valid, host-bits-set and invalid CIDR ranges.
 
@@ -36,7 +37,8 @@ namespace RtcCallMonitor.Tests
 
         [Theory]
         [InlineData("")]
-        [InlineData("192.168.1.0")]
+        [InlineData("192.168.1")]
+        [InlineData("10")]
         [InlineData("192.168.1.0/33")]
         [InlineData("not-an-ip/24")]
         [InlineData("3.7.35/25")]
@@ -44,6 +46,16 @@ namespace RtcCallMonitor.Tests
         public void InvalidRange_Throws(string cidr)
         {
             Assert.Throws<FormatException>(() => NetworkParser.Parse(cidr, out _));
+        }
+
+        [Theory]
+        [InlineData("203.0.113.10", "203.0.113.10/32")]
+        [InlineData("2001:db8::1", "2001:db8::1/128")]
+        public void SingleAddress_IsAOneAddressRange(string value, string expected)
+        {
+            var net = NetworkParser.Parse(value, out var corrected);
+            Assert.Equal(expected, net.ToString());
+            Assert.Null(corrected);
         }
     }
 }

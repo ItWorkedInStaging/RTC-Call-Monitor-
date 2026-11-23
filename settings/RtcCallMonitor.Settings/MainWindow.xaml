@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MainWindow.xaml (RtcCallMonitor.Settings)
+  Version: 1.0.0
+  Changelog:
+    1.0.0 - Initial version. Pages: MQTT, Webhooks, Detection, Providers;
+            Save / Revert at the bottom, messages in the bar at the top.
+-->
+<Window
+    x:Class="RtcCallMonitor.Settings.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="RTC Call Monitor settings">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <InfoBar x:Name="Banner" Grid.Row="0" IsOpen="False" IsClosable="True" Margin="12,8,12,0" />
+
+        <NavigationView x:Name="Nav" Grid.Row="1"
+                        PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
+                        IsPaneToggleButtonVisible="False" OpenPaneLength="200"
+                        SelectionChanged="Nav_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="NavMqtt" Content="MQTT" Tag="mqtt">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Webhooks" Tag="webhooks">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE71B;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Detection" Tag="detection">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D9;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Providers" Tag="providers">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE774;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <ScrollViewer x:Name="PageScroller" VerticalScrollBarVisibility="Auto">
+                <Grid Padding="32,16,32,32" MaxWidth="760" HorizontalAlignment="Left">
+
+                    <!-- ============================== MQTT ============================== -->
+                    <StackPanel x:Name="PageMqtt" Spacing="14">
+                        <TextBlock Text="MQTT" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Publishes the call state to an MQTT broker, e.g. the Mosquitto add-on in Home Assistant. Home Assistant finds the sensors by itself (MQTT discovery)." />
+                        <ToggleSwitch x:Name="MqttEnabled" Header="Publish to MQTT" />
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="140" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="MqttHost" Header="Broker host or IP address" PlaceholderText="e.g. 192.168.1.10 or homeassistant.local" />
+                            <NumberBox x:Name="MqttPort" Grid.Column="1" Header="Port" Minimum="1" Maximum="65535"
+                                       SpinButtonPlacementMode="Compact" Value="1883" />
+                        </Grid>
+
+                        <TextBox x:Name="MqttUser" Header="Username"
+                                 Description="In Home Assistant: the MQTT user's username, not its display name." />
+                        <StackPanel Spacing="6">
+                            <PasswordBox x:Name="MqttPassword" Header="Password" />
+                            <CheckBox x:Name="MqttClearPassword" Content="Remove the saved password" Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="24">
+                            <ToggleSwitch x:Name="MqttTls" Header="Use TLS" Toggled="MqttTls_Toggled" />
+                            <CheckBox x:Name="MqttUntrusted" Content="Accept self-signed certificates" VerticalAlignment="Bottom" />
+                        </StackPanel>
+
+                        <TextBox x:Name="MqttDevice" Header="Name of this PC in Home Assistant" />
+
+                        <Expander Header="Topics" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <StackPanel Spacing="12">
+                                <TextBox x:Name="MqttBaseTopic" Header="Base topic" PlaceholderText="rtc-call-monitor" />
+                                <TextBox x:Name="MqttDiscovery" Header="Home Assistant discovery prefix" PlaceholderText="homeassistant" />
+                            </StackPanel>
+                        </Expander>
+
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="MqttTestButton" Content="Test connection" Click="MqttTest_Click" />
+                            <ProgressRing x:Name="MqttTestRing" IsActive="False" Width="20" Height="20" />
+                        </StackPanel>
+                        <TextBlock x:Name="MqttTestResult" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- ============================== Webhooks ============================== -->
+                    <StackPanel x:Name="PageWebhooks" Spacing="14" Visibility="Collapsed">
+                        <TextBlock Text="Webhooks" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Sends an HTTP POST when a call starts ({&quot;provider&quot;}) and ends ({&quot;provider&quot;, &quot;duration&quot;})." />
+                        <ToggleSwitch x:Name="WebhookEnabled" Header="Send webhooks" />
+                        <TextBox x:Name="WebhookStart" Header="Call start URL" PlaceholderText="http://homeassistant.local:8123/api/webhook/..." />
+                        <TextBox x:Name="WebhookEnd" Header="Call end URL" PlaceholderText="http://homeassistant.local:8123/api/webhook/..." />
+
+                        <TextBlock Text="Extra headers" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Values of Authorization, token and key headers are stored encrypted and are not shown again; leave them empty to keep the saved value." />
+                        <StackPanel x:Name="HeadersPanel" Spacing="8" />
+                        <Button Content="Add header" Click="AddHeader_Click" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="12" Margin="0,8,0,0">
+                            <Button x:Name="WebhookTestButton" Content="Send test to the start URL" Click="WebhookTest_Click" />
+                            <ProgressRing x:Name="WebhookTestRing" IsActive="False" Width="20" Height="20" />
+                        </StackPanel>
+                        <TextBlock x:Name="WebhookTestResult" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- ============================== Detection ============================== -->
+                    <StackPanel x:Name="PageDetection" Spacing="14" Visibility="Collapsed">
+                        <TextBlock Text="Detection" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="A call is detected when UDP packets to a provider's addresses keep coming for a few intervals in a row." />
+
+                        <Grid ColumnSpacing="12" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <NumberBox x:Name="CheckInterval" Header="Interval (ms)" Minimum="100" Maximum="60000" SmallChange="100" LargeChange="500"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="MinRate" Grid.Column="1" Header="Packets per interval to count" Minimum="1" Maximum="100000"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="StartIntervals" Grid.Row="1" Header="Intervals before a call starts" Minimum="1" Maximum="600"
+                                       SpinButtonPlacementMode="Compact" />
+                            <NumberBox x:Name="EndIntervals" Grid.Row="1" Grid.Column="1" Header="Quiet intervals before it ends" Minimum="1" Maximum="600"
+                                       SpinButtonPlacementMode="Compact" />
+                        </Grid>
+
+                        <TextBox x:Name="IgnorePorts" Header="Ignore these remote UDP ports"
+                                 Description="Comma separated. 443 is QUIC web traffic (e.g. a browser talking to Google), which is not a call. Empty: ignore none." />
+
+                        <TextBox x:Name="LocalNetworks" Header="Extra local networks to ignore (one per line)" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MinHeight="72" PlaceholderText="e.g. 10.69.0.0/16"
+                                 Description="Each network connection's own subnet is always ignored." />
+
+                        <ToggleSwitch x:Name="CaptureIPv6" Header="Also watch IPv6 traffic" />
+
+                        <TextBox x:Name="Interfaces" Header="Only watch these network connections (one per line)" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MinHeight="72" PlaceholderText="Empty: all of them. * and ? work, e.g. Ethernet*"
+                                 Description="Matched against the connection's name or description." />
+
+                        <CheckBox x:Name="UseDefaultExcludes" Content="Skip virtual adapters (built-in list)" Click="UseDefaultExcludes_Click" />
+                        <TextBox x:Name="Excludes" Header="Skip these network connections (one per line)" AcceptsReturn="True" TextWrapping="Wrap"
+                                 MinHeight="72" />
+                    </StackPanel>
+
+                    <!-- ============================== Providers ============================== -->
+                    <StackPanel x:Name="PageProviders" Spacing="14" Visibility="Collapsed">
+                        <TextBlock Text="Providers" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="Address ranges of each call service. Bundled lists ship with the program; Teams and Zoom are kept up to date from Microsoft's and Zoom's published lists." />
+
+                        <StackPanel Orientation="Horizontal" Spacing="24">
+                            <ToggleSwitch x:Name="AutoUpdate" Header="Download updated lists" />
+                            <NumberBox x:Name="AutoUpdateHours" Header="Every (hours)" Minimum="1" Maximum="720"
+                                       SpinButtonPlacementMode="Compact" Width="140" />
+                        </StackPanel>
+
+                        <TextBlock Text="In use now" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+                        <StackPanel x:Name="LoadedPanel" Spacing="2" />
+
+                        <TextBlock Text="Your own lists" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Text="For services without a bundled list (e.g. your 3CX PBX's public IP), or extra ranges for one that has one. One address or range per line, e.g. 203.0.113.10 or 203.0.113.0/28." />
+                        <StackPanel x:Name="CustomPanel" Spacing="12" />
+                        <Button Content="Add a list" Click="AddCustom_Click" />
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </NavigationView>
+
+        <!-- ============================== footer ============================== -->
+        <Border Grid.Row="2" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                Background="{ThemeResource LayerFillColorDefaultBrush}" Padding="16,12">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="FooterText" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <ProgressRing x:Name="BusyRing" Grid.Column="1" IsActive="False" Width="20" Height="20" />
+                <Button x:Name="RevertButton" Grid.Column="2" Content="Revert" Click="Revert_Click" IsEnabled="False" />
+                <Button x:Name="SaveButton" Grid.Column="3" Content="Save" Click="Save_Click" IsEnabled="False"
+                        Style="{StaticResource AccentButtonStyle}" />
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

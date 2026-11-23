@@ -1,0 +1,48 @@
+<!--
+  RtcCallMonitor.Settings.csproj
+  Version: 1.0.0
+  Changelog:
+    1.0.0 - Initial version. Settings window for RTC Call Monitor (WinUI 3,
+            Windows App SDK, unpackaged and self-contained: nothing extra to
+            install). Talks to the monitor over its named pipe; it never
+            touches the config files itself. Not in RtcCallMonitor.sln (it
+            needs a Windows platform to build); build-release.ps1 publishes it.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <AssemblyName>RtcCallMonitor.Settings</AssemblyName>
+    <RootNamespace>RtcCallMonitor.Settings</RootNamespace>
+    <Version>1.0.0</Version>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <UseWinUI>true</UseWinUI>
+    <!-- unpackaged exe; the Windows App SDK runtime is copied next to it -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>true</EnableMsixTooling>
+
+    <Platforms>x64;ARM64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- the pipe messages are shared with the monitor -->
+    <Compile Include="..\..\src\Ipc\StatusContract.cs" Link="Ipc\StatusContract.cs" />
+    <Compile Include="..\..\src\Ipc\SettingsContract.cs" Link="Ipc\SettingsContract.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.*" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.*" />
+  </ItemGroup>
+</Project>

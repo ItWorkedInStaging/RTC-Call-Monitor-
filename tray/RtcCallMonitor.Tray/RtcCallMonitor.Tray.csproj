@@ -1,7 +1,8 @@
 <!--
   RtcCallMonitor.Tray.csproj
-  Version: 1.1.0
+  Version: 1.2.0
   Changelog:
+    1.2.0 - Settings... menu item; links SettingsContract.cs (pipe protocol 2).
     1.1.0 - Dark mode menu.
     1.0.0 - Initial version. Windows tray app for RTC Call Monitor (WinForms).
 -->
@@ -15,7 +16,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <AssemblyName>RtcCallMonitor.Tray</AssemblyName>
     <RootNamespace>RtcCallMonitor.Tray</RootNamespace>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
@@ -24,6 +25,7 @@
   <ItemGroup>
     <!-- the pipe messages are shared with the monitor -->
     <Compile Include="..\..\src\Ipc\StatusContract.cs" Link="Ipc\StatusContract.cs" />
+    <Compile Include="..\..\src\Ipc\SettingsContract.cs" Link="Ipc\SettingsContract.cs" />
   </ItemGroup>
 
   <ItemGroup>

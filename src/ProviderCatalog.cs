@@ -1,6 +1,9 @@
 // ProviderCatalog.cs
-// Version: 1.2.0
+// Version: 1.3.0
 // Changelog:
+//   1.3.0 - Three places: bundled lists (Program Files), downloaded lists and
+//           your own lists in the config folder (ConfigPaths). Downloaded lists
+//           replace the bundled list of a provider; your own lists add to it.
 //   1.2.0 - Reload reports whether the ranges actually changed.
 //   1.1.0 - Reloadable while running (Reload swaps in a new set of ranges, or
 //           keeps the current one if the files have errors). Files in
@@ -34,6 +37,10 @@ namespace RtcCallMonitor
         }
 
         private readonly ProvidersOptions _options;
+        private readonly string _bundledLabel;
+        private readonly string _autoDir;
+        private readonly string _autoLabel;
+        private readonly string _customDir;
         private volatile Snapshot _snapshot;
         private readonly object _reloadLock = new object();
 
@@ -50,26 +57,55 @@ namespace RtcCallMonitor
         public string DirectoryPath { get; }
 
         /// <summary>Full path of the folder for downloaded lists.</summary>
-        public string AutoDirectoryPath => Path.Combine(DirectoryPath, AutoFolderName);
+        public string AutoDirectoryPath => _autoDir;
 
-        private ProviderCatalog(ProvidersOptions options, string directoryPath, Snapshot snapshot, List<string> errors, List<string> warnings)
+        /// <summary>Full path of the folder with your own lists, or null.</summary>
+        public string CustomDirectoryPath => _customDir;
+
+        private ProviderCatalog(ProvidersOptions options, string directoryPath, string bundledLabel, string autoDir, string autoLabel,
+            string customDir, Snapshot snapshot, List<string> errors, List<string> warnings)
         {
             _options = options;
             DirectoryPath = directoryPath;
+            _bundledLabel = bundledLabel;
+            _autoDir = autoDir;
+            _autoLabel = autoLabel;
+            _customDir = customDir;
             _snapshot = snapshot;
             Errors = errors;
             Warnings = warnings;
         }
 
-        /// <summary>Loads all provider files from the configured folder (relative to contentRoot) and merges inline ranges.</summary>
-        public static ProviderCatalog Load(ProvidersOptions options, string contentRoot)
+        /// <summary>Bundled lists in &lt;contentRoot&gt;/providers, downloaded lists in its auto subfolder (no config folder).</summary>
+        public static ProviderCatalog Load(ProvidersOptions options, string contentRoot) => Load(options, contentRoot, null);
+
+        /// <summary>
+        /// Bundled lists from the configured folder (relative to contentRoot); with a config
+        /// folder, downloaded lists and your own lists from there. Inline ranges are merged in.
+        /// </summary>
+        public static ProviderCatalog Load(ProvidersOptions options, string contentRoot, ConfigPaths paths)
         {
             var dir = string.IsNullOrWhiteSpace(options.Directory) ? "providers" : options.Directory;
             var fullDir = Path.IsPathRooted(dir) ? dir : Path.Combine(contentRoot, dir);
+            var label = dir.TrimEnd('/', '\\').Replace('\\', '/');
+
+            string autoDir, autoLabel, customDir = null;
+            if (paths != null)
+            {
+                autoDir = paths.AutoProvidersDirectory;
+                autoLabel = "config/providers/auto";
+                customDir = paths.CustomProvidersDirectory;
+            }
+            else
+            {
+                autoDir = Path.Combine(fullDir, AutoFolderName);
+                autoLabel = $"{label}/{AutoFolderName}";
+            }
+
             var errors = new List<string>();
             var warnings = new List<string>();
-            var snapshot = Build(options, dir, fullDir, errors, warnings);
-            return new ProviderCatalog(options, fullDir, snapshot, errors, warnings);
+            var snapshot = Build(options, label, fullDir, autoDir, autoLabel, customDir, errors, warnings);
+            return new ProviderCatalog(options, fullDir, label, autoDir, autoLabel, customDir, snapshot, errors, warnings);
         }
 
         /// <summary>Builds a catalog directly from ranges (used by tests).</summary>
@@ -85,7 +121,7 @@ namespace RtcCallMonitor
                     StringComparer.OrdinalIgnoreCase),
                 Sources = ranges.ToDictionary(kv => kv.Key.ToLowerInvariant(), kv => "test", StringComparer.OrdinalIgnoreCase),
             };
-            return new ProviderCatalog(new ProvidersOptions(), "", snapshot, errors, warnings);
+            return new ProviderCatalog(new ProvidersOptions(), "", "", null, null, null, snapshot, errors, warnings);
         }
 
         /// <summary>
@@ -104,8 +140,7 @@ namespace RtcCallMonitor
 
             lock (_reloadLock)
             {
-                var dir = string.IsNullOrWhiteSpace(_options.Directory) ? "providers" : _options.Directory;
-                var snapshot = Build(_options, dir, DirectoryPath, errors, warnings);
+                var snapshot = Build(_options, _bundledLabel, DirectoryPath, _autoDir, _autoLabel, _customDir, errors, warnings);
                 if (errors.Count > 0) return false;
                 changed = snapshot.Fingerprint != _snapshot.Fingerprint;
                 if (changed) _snapshot = snapshot;
@@ -118,11 +153,11 @@ namespace RtcCallMonitor
                 kv.Key + "@" + (sources.TryGetValue(kv.Key, out var src) ? src : "") + ":" +
                 string.Join(",", kv.Value.Select(n => n.ToString()).OrderBy(x => x, StringComparer.Ordinal))));
 
-        private static Snapshot Build(ProvidersOptions options, string dir, string fullDir, List<string> errors, List<string> warnings)
+        private static Snapshot Build(ProvidersOptions options, string label, string fullDir, string autoDir, string autoLabel,
+            string customDir, List<string> errors, List<string> warnings)
         {
             var ranges = new Dictionary<string, List<IPNetwork>>(StringComparer.OrdinalIgnoreCase);
             var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var label = dir.TrimEnd('/', '\\').Replace('\\', '/');
 
             if (Directory.Exists(fullDir))
             {
@@ -132,26 +167,46 @@ namespace RtcCallMonitor
                     ranges[name] = ParseLines(ReadLines(file, errors), $"{label}/{Path.GetFileName(file)}", errors, warnings);
                     sources[name] = $"{label}/{Path.GetFileName(file)}";
                 }
+            }
 
-                // downloaded lists replace the bundled list of the same provider
-                var autoDir = Path.Combine(fullDir, AutoFolderName);
-                if (Directory.Exists(autoDir))
+            // downloaded lists replace the bundled list of the same provider
+            if (autoDir != null && Directory.Exists(autoDir))
+            {
+                foreach (var (name, file) in TxtFiles(autoDir))
                 {
-                    foreach (var (name, file) in TxtFiles(autoDir))
+                    var fileLabel = $"{autoLabel}/{Path.GetFileName(file)}";
+                    var parsed = ParseLines(ReadLines(file, errors), fileLabel, errors, warnings);
+                    if (parsed.Count == 0)
                     {
-                        var fileLabel = $"{label}/{AutoFolderName}/{Path.GetFileName(file)}";
-                        var parsed = ParseLines(ReadLines(file, errors), fileLabel, errors, warnings);
-                        if (parsed.Count == 0)
-                        {
-                            warnings.Add($"{fileLabel} has no ranges; using the bundled list instead");
-                            continue;
-                        }
+                        warnings.Add($"{fileLabel} has no ranges; using the bundled list instead");
+                        continue;
+                    }
+                    ranges[name] = parsed;
+                    sources[name] = fileLabel;
+                }
+            }
+
+            // your own lists add to whatever is there (e.g. 3cx, or extra Zoom ranges)
+            if (customDir != null && Directory.Exists(customDir))
+            {
+                foreach (var (name, file) in TxtFiles(customDir))
+                {
+                    var fileLabel = $"config/providers/{Path.GetFileName(file)}";
+                    var parsed = ParseLines(ReadLines(file, errors), fileLabel, errors, warnings);
+                    if (ranges.TryGetValue(name, out var list))
+                    {
+                        list.AddRange(parsed);
+                        sources[name] += " + " + fileLabel;
+                    }
+                    else
+                    {
                         ranges[name] = parsed;
                         sources[name] = fileLabel;
                     }
                 }
             }
-            else if (options.Inline == null || options.Inline.Count == 0)
+
+            if (!Directory.Exists(fullDir) && ranges.Count == 0 && (options.Inline == null || options.Inline.Count == 0))
             {
                 errors.Add($"Providers folder not found: {fullDir}");
             }

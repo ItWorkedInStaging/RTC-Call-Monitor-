@@ -1,6 +1,8 @@
 // MqttNotifier.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - TestConnectionAsync for the settings window's "Test connection"
+//           (separate client id, so the running connection is not dropped).
 //   1.1.0 - Publishes the paused state (IPauseAwareNotifier) for the tray app's
 //           pause/resume, retained and re-sent after reconnecting.
 //   1.0.0 - Initial version. Publishes call state to MQTT (MQTTnet 5) with
@@ -76,37 +78,77 @@ namespace RtcCallMonitor.Notifications
                 return Task.CompletedTask;
             };
 
-            var builder = new MqttClientOptionsBuilder()
-                .WithTcpServer(_options.Host, _options.Port)
-                .WithClientId($"rtc-call-monitor-{_topics.DeviceId}")
-                .WithCleanSession(true)
-                .WithKeepAlivePeriod(TimeSpan.FromSeconds(30))
-                .WithTimeout(TimeSpan.FromSeconds(10))
+            _clientOptions = Builder(_options, $"rtc-call-monitor-{_topics.DeviceId}")
                 .WithWillTopic(_topics.Availability)
                 .WithWillPayload(MqttTopics.Offline)
                 .WithWillRetain(true)
-                .WithWillQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce);
-
-            if (!string.IsNullOrWhiteSpace(_options.Username))
-            {
-                builder.WithCredentials(_options.Username, _options.Password ?? "");
-            }
-            if (_options.UseTls)
-            {
-                builder.WithTlsOptions(tls => tls
-                    .UseTls(true)
-                    .WithAllowUntrustedCertificates(_options.AllowUntrustedCertificates)
-                    .WithIgnoreCertificateChainErrors(_options.AllowUntrustedCertificates)
-                    .WithCertificateValidationHandler(_options.AllowUntrustedCertificates ? _ => true : null));
-            }
-
-            _clientOptions = builder.Build();
+                .WithWillQualityOfServiceLevel(MqttQualityOfServiceLevel.AtLeastOnce)
+                .Build();
             _loopCts = new CancellationTokenSource();
             _loop = Task.Run(() => ConnectionLoopAsync(_loopCts.Token));
 
             _logger.LogInformation("MQTT enabled: {Host}:{Port}{Tls}, topics under {Base}, HA discovery prefix {Prefix}",
                 _options.Host, _options.Port, _options.UseTls ? " (TLS)" : "", _topics.Base, _topics.DiscoveryPrefix);
             return Task.CompletedTask;
+        }
+
+        private static MqttClientOptionsBuilder Builder(MqttOptions options, string clientId)
+        {
+            var builder = new MqttClientOptionsBuilder()
+                .WithTcpServer(options.Host, options.Port)
+                .WithClientId(clientId)
+                .WithCleanSession(true)
+                .WithKeepAlivePeriod(TimeSpan.FromSeconds(30))
+                .WithTimeout(TimeSpan.FromSeconds(10));
+
+            if (!string.IsNullOrWhiteSpace(options.Username))
+            {
+                builder.WithCredentials(options.Username, options.Password ?? "");
+            }
+            if (options.UseTls)
+            {
+                builder.WithTlsOptions(tls => tls
+                    .UseTls(true)
+                    .WithAllowUntrustedCertificates(options.AllowUntrustedCertificates)
+                    .WithIgnoreCertificateChainErrors(options.AllowUntrustedCertificates)
+                    .WithCertificateValidationHandler(options.AllowUntrustedCertificates ? _ => true : null));
+            }
+            return builder;
+        }
+
+        /// <summary>Connects once with these settings and disconnects; returns (ok, plain-language message).</summary>
+        public static async Task<(bool Ok, string Message)> TestConnectionAsync(MqttOptions options, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(options.Host)) return (false, "Enter the broker's host name or IP address.");
+            var target = $"{options.Host}:{options.Port}{(options.UseTls ? " (TLS)" : "")}";
+            using var client = new MqttClientFactory().CreateMqttClient();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+            try
+            {
+                var topics = new MqttTopics("x", "x", options.EffectiveDeviceName);
+                var result = await client.ConnectAsync(Builder(options, $"rtc-call-monitor-{topics.DeviceId}-test").Build(), cts.Token);
+                if (result.ResultCode != MqttClientConnectResultCode.Success)
+                {
+                    var hint = result.ResultCode == MqttClientConnectResultCode.NotAuthorized ||
+                               result.ResultCode == MqttClientConnectResultCode.BadUserNameOrPassword
+                        ? ". Check the username and password (in Home Assistant, the MQTT user's username, not the display name)."
+                        : ".";
+                    return (false, $"{target} refused the connection: {result.ResultCode}{hint}");
+                }
+                await client.DisconnectAsync(new MqttClientDisconnectOptionsBuilder().Build(), CancellationToken.None);
+                return (true, $"Connected to {target}.");
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return (false, $"No answer from {target} within 10 seconds.");
+            }
+            catch (Exception e)
+            {
+                var inner = e;
+                while (inner.InnerException != null) inner = inner.InnerException;
+                return (false, $"Could not connect to {target}: {inner.Message}");
+            }
         }
 
         private async Task ConnectionLoopAsync(CancellationToken ct)

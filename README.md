@@ -30,7 +30,7 @@ It only looks at packet counts and IP addresses: it never reads call content. Ca
 
 Other providers can be added with a text file; see [Providers](#providers). Changes to the files are picked up while the monitor is running.
 
-**Self-hosted phone systems (3CX, FreePBX, ...)**: call media goes to *your own* PBX or media server rather than to a vendor's network, so it is not covered by the files above. Add your PBX's public IP to a new file such as `providers/3cx.txt` (see [Call not detected](#call-not-detected) for how to find it).
+**Self-hosted phone systems (3CX, FreePBX, ...)**: call media goes to *your own* PBX or media server rather than to a vendor's network, so it is not covered by the files above. Add your PBX's public IP as your own provider list, for example **3cx**, in the [settings window](#settings-window) (**Providers** page); see [Call not detected](#call-not-detected) for how to find the IP.
 
 ## Requirements
 
@@ -107,16 +107,28 @@ automation:
 
 ### Files and precedence
 
-All settings live in the `src` folder:
+When installed, change the settings with the [settings window](#settings-window) (tray icon → **Settings...**). It is the same set of settings described below, stored in a file you no longer edit by hand.
+
+Defaults ship with the program (Program Files, or `src` when you run from the source):
 
 | File | In git | Purpose |
 |---|---|---|
 | `appsettings.json` | yes | Defaults |
-| `appsettings.Local.json` | **no** | Your values and secrets; overrides the defaults |
-| `appsettings.Local.example.json` | yes | Template for the file above |
-| `providers/<name>.txt` | yes | IP ranges per provider |
+| `appsettings.Local.example.json` | yes | Template for a first install |
+| `providers/<name>.txt` | yes | Bundled IP ranges per provider |
 
-Later sources win: `appsettings.json` → `appsettings.{Environment}.json` → `appsettings.Local.json` → environment variables starting with `RTCMON_` (use `__` between levels, e.g. `RTCMON_Mqtt__Password`) → command-line arguments.
+Your settings live in the **config folder**, `C:\ProgramData\RtcCallMonitor\config`:
+
+| File | Purpose |
+|---|---|
+| `appsettings.Local.json` | Your values; overrides the defaults. Written by the settings window |
+| `providers\<name>.txt` | Your own provider lists (e.g. `3cx.txt`); added to the bundled ranges |
+| `providers\auto\<name>.txt` | Downloaded Teams/Zoom lists; replace the bundled list |
+| `editors.json` | Windows accounts allowed to change settings (the installer adds you) |
+
+The config folder is locked to SYSTEM and Administrators because it holds the MQTT password. The MQTT password and secret webhook headers (`Authorization`, anything with *token*, *key* or *secret* in the name) are also stored encrypted with Windows DPAPI (`"dpapi:..."`): they only open on this PC, and the settings window never shows them. A plain password typed into the file by hand is encrypted the next time the service starts.
+
+Later sources win: `appsettings.json` → `appsettings.{Environment}.json` → `appsettings.Local.json` next to the program (`src\appsettings.Local.json` when you run from the source) → `appsettings.Local.json` in the config folder → environment variables starting with `RTCMON_` (use `__` between levels, e.g. `RTCMON_Mqtt__Password`) → command-line arguments. `RTCMON_CONFIG_DIR` points the config folder somewhere else.
 
 The configuration is checked at startup. If anything is wrong, every problem is listed and the app exits (exit code 2):
 
@@ -197,7 +209,7 @@ Failures (10 s timeout, non-2xx responses) are logged as warnings.
 
 ### Providers
 
-Each file in `src/providers` is one provider, and the file name is the provider name (`zoom.txt` → `zoom`). One CIDR range per line; blank lines and anything after `#` are ignored:
+Each file in `providers` is one provider, and the file name is the provider name (`zoom.txt` → `zoom`). One range per line (a single address such as `203.0.113.10` counts as one address); blank lines and anything after `#` are ignored:
 
 ```text
 # zoom.txt - source: https://assets.zoom.us/docs/ipranges/ZoomMeetings.txt
@@ -205,9 +217,15 @@ Each file in `src/providers` is one provider, and the file name is the provider 
 3.21.137.128/25
 ```
 
-To add a provider, add a file. `Providers.Directory` sets a different folder, and `Providers.Inline` adds ranges from config (`{ "zoom": [ "203.0.113.0/24" ] }`).
+Lists are read from three places:
 
-**Live reload:** adding, editing or deleting a file in `providers` (or `providers/auto`) is picked up about 2 seconds later, without a restart. If the changed file has an error, the log lists it and the previous ranges stay in use.
+1. **Bundled** lists next to the program (`providers\`), replaced by every upgrade.
+2. **Downloaded** lists in the config folder (`providers\auto\`), which replace the bundled list of that provider (see below).
+3. **Your own** lists in the config folder (`providers\`), made on the settings window's **Providers** page. A new name is a new provider (e.g. `3cx`); the name of an existing provider adds your ranges to it.
+
+`Providers.Directory` sets a different folder for the bundled lists, and `Providers.Inline` adds ranges from config (`{ "zoom": [ "203.0.113.0/24" ] }`).
+
+**Live reload:** adding, editing or deleting one of your own or downloaded lists is picked up about 2 seconds later, without a restart. If the changed file has an error, the log lists it and the previous ranges stay in use.
 
 #### Automatic updates
 
@@ -224,9 +242,9 @@ Teams and Zoom publish their IP lists in a machine-readable form, so the monitor
 | `msteams` | Microsoft 365 IP web service, `endpoints.office.com` (Skype/Teams service area, Optimize category). The version is checked first, so the full list is only fetched when Microsoft publishes a new one. |
 | `zoom` | `https://assets.zoom.us/docs/ipranges/ZoomMeetings.txt` |
 
-- Downloaded lists are saved in `providers/auto/` (git-ignored) and **replace** the bundled file for that provider. Delete a file there to go back to the bundled list.
+- Downloaded lists are saved in the config folder's `providers\auto\` (`src\providers\auto\` without a config folder) and **replace** the bundled file for that provider. Delete a file there to go back to the bundled list.
 - A download is only used if every line is a valid range, it isn't empty, and it isn't less than half the size of the previous download. Otherwise the log explains why and the current list stays in use. Network errors are logged as warnings and also keep the current list.
-- The Microsoft web service needs a client ID; a random one is created once and kept in `providers/auto/update-state.json`.
+- The Microsoft web service needs a client ID; a random one is created once and kept in `update-state.json` next to the downloaded lists.
 - Set `Enabled` to `false` to use only the bundled files.
 
 Long vendor lists can be merged into fewer ranges with the helper script (needs Python and `pip install -r requirements.txt`):
@@ -245,23 +263,24 @@ For everyday use, install the monitor as a Windows service plus the tray app wit
 .\build-release.ps1
 ```
 
-It first runs pre-flight checks and stops with the reason if one fails: Windows, a complete source folder, the .NET 10 SDK and Desktop Runtime (installed with winget if missing), a NuGet source (nuget.org is added if there is none), package restore, all `Microsoft.Extensions.*` packages on 10.x, and no known-vulnerable packages. `-CheckOnly` runs just the checks, `-SkipChecks` skips them, and `-NoInstall` reports missing .NET/NuGet setup instead of installing it. In Windows PowerShell, run it as `powershell -ExecutionPolicy Bypass -File .\build-release.ps1` if scripts are blocked. It then runs the tests, publishes both apps and creates `release\RtcCallMonitor-<version>\` and `release\RtcCallMonitor-<version>.zip`. Your `appsettings.Local.json` is never put into a release.
+It first runs pre-flight checks and stops with the reason if one fails: Windows, a complete source folder, the .NET 10 SDK and Desktop Runtime (installed with winget if missing), a NuGet source (nuget.org is added if there is none), package restore, all `Microsoft.Extensions.*` packages on 10.x, and no known-vulnerable packages. `-CheckOnly` runs just the checks, `-SkipChecks` skips them, and `-NoInstall` reports missing .NET/NuGet setup instead of installing it. In Windows PowerShell, run it as `powershell -ExecutionPolicy Bypass -File .\build-release.ps1` if scripts are blocked. It then runs the tests, publishes the monitor, the tray app and the settings window (`-NoSettingsApp` leaves the settings window out) and creates `release\RtcCallMonitor-<version>\` and `release\RtcCallMonitor-<version>.zip`. Your `appsettings.Local.json` is never put into a release.
 
 **2. Install or upgrade:** double-click **`Install.cmd`** in that folder (or in the extracted zip). It asks for administrator rights once (UAC), then:
 
 - checks for the .NET 10 Desktop Runtime and offers to install it with winget if it's missing;
 - stops the running service and tray app (upgrade);
-- copies the files to `C:\Program Files\RtcCallMonitor` (tray in `tray\`), **keeping** your `appsettings.Local.json`, the downloaded `providers\auto` lists and the logs;
-- on a first install creates `appsettings.Local.json` from the example and opens it in Notepad for your MQTT/webhook details;
+- moves settings from older versions out of Program Files into the config folder (`appsettings.Local.json`, your own provider lists such as `3cx.txt`, the downloaded lists), locks the folder to administrators and allows **you** (the signed-in user) to change settings;
+- copies the files to `C:\Program Files\RtcCallMonitor` (tray in `tray\`, settings window in `settings\`);
+- on a first install creates the settings from the example and opens the settings window at the end for your MQTT/webhook details;
 - creates or updates the **RTC Call Monitor** service: automatic (delayed) start, restarts itself 1 minute after a crash;
 - starts the service and shows the last log lines;
 - starts the tray app and sets it to start when you sign in.
 
 Running `Install.cmd` from a newer release upgrades in place. Options for `installer\Install.ps1`: `-InstallDir <folder>`, `-NoTray`. A log of the elevated part is written to `%TEMP%\RtcCallMonitor-install.log`.
 
-**Uninstall:** double-click **`Uninstall.cmd`**. It removes the service, the tray's sign-in entry and the program folder, and asks whether to delete your settings and logs. If you keep them, the settings are saved to `%ProgramData%\RtcCallMonitor\appsettings.Local.json.bak` and the next install restores them.
+**Uninstall:** double-click **`Uninstall.cmd`**. It removes the service, the tray's sign-in entry and the program folder, and asks whether to delete your settings, provider lists and logs. If you keep them, they stay in `%ProgramData%\RtcCallMonitor` and the next install uses them.
 
-**Changing settings later:** edit `C:\Program Files\RtcCallMonitor\appsettings.Local.json` (open the editor as administrator, or use the tray's **Open config folder**), then **Restart monitor** in the tray menu.
+**Changing settings later:** tray icon → **Settings...**, change what you need and **Save**. No administrator rights or restart needed: the monitor checks the settings, saves them and restarts itself.
 
 - The service runs as *Local System*, which has the rights needed for packet capture.
 - Warnings and errors also go to the Windows **Event Viewer** (Windows Logs → Application, source *RtcCallMonitor*).
@@ -305,19 +324,41 @@ C:\ProgramData\RtcCallMonitor\logs\rtc-call-monitor-20261123.log
 Left-click shows the status (connections captured, MQTT/webhook). The right-click menu has:
 
 - **Pause detection** for 15 minutes, 1 hour, 4 hours or until resumed, and **Resume detection**. Pausing ends a call that was already reported; Home Assistant gets a **Detection paused** entity (`binary_sensor.<device>_detection_paused`). A call still going when you resume is reported again.
-- **Open log file**, **Open log folder**, **Open config folder** (selects `appsettings.Local.json`), **Open README**.
-- **Restart monitor**: restarts the Windows service so settings changes take effect (asks for administrator rights). Only available when the monitor is installed as a service.
+- **Settings...**: opens the [settings window](#settings-window).
+- **Open log file**, **Open log folder**, **Open README**.
+- **Restart monitor**: restarts the Windows service (asks for administrator rights); not needed after saving settings. Only available when the monitor is installed as a service.
 - **Start with Windows**: starts the tray app when you sign in (for your user only, no admin needed).
 
 The installer sets it up (see [Installing](#installing-one-click)). To run it from the source instead: `dotnet run --project tray\RtcCallMonitor.Tray`. Only one copy runs per user.
 
 The pipe (`\\.\pipe\RtcCallMonitor`) only accepts connections from users signed in to this PC, not from the network.
 
+## Settings window
+
+`RtcCallMonitor.Settings` (WinUI 3) edits the settings without opening files or asking for administrator rights. Open it from the tray icon → **Settings...**.
+
+| Page | What you set |
+|---|---|
+| **MQTT** | On/off, broker host and port, username and password, TLS, the PC's name in Home Assistant, topics. **Test connection** tries the broker with what is on screen. |
+| **Webhooks** | On/off, call start and end URLs, extra headers. **Send test** posts `{"provider":"test","test":true}` to the start URL. |
+| **Detection** | Interval, packets per interval, intervals before a call starts/ends, ignored UDP ports, extra local networks, IPv6, which network connections to watch or skip. |
+| **Providers** | Automatic Teams/Zoom updates, the lists in use now (with where each came from), and your own lists (e.g. `3cx` with your PBX's IP). |
+
+**Save** sends everything to the monitor, which checks it (the same checks as at startup), writes it to the config folder and restarts itself in a few seconds. Problems are listed at the top and nothing is saved until they are fixed. **Revert** goes back to what is saved. Closing the window with unsaved changes asks first.
+
+How it is kept safe:
+
+- The settings window never reads or writes the files itself. It asks the running monitor (service) over the local pipe, and the monitor only accepts settings requests from accounts in `editors.json` (the installer adds whoever ran it), elevated administrators, and its own account. Another user on the same PC gets "not allowed"; status and pause still work for everyone.
+- Passwords and secret headers are sent to the monitor once and stored encrypted; the window only shows that one is saved. Leave the box empty to keep it, or tick **Remove the saved password**.
+- To let another Windows account change settings, run `Install.cmd` while signed in as that account.
+
+The monitor has to be running for the window to load or save; otherwise it says so and offers **Retry**.
+
 ## Troubleshooting
 
 ### Call not detected
 
-The call's IP address is probably not in any provider file. Turn on debug logging in `appsettings.Local.json`:
+The call's IP address is probably not in any provider file. Turn on debug logging (`appsettings.Local.json` in the config folder, as administrator, or `src\appsettings.Local.json` when running from the source):
 
 ```json
 "Logging": { "LogLevel": { "RtcCallMonitor": "Debug" } }
@@ -329,7 +370,7 @@ During a call the log then shows the busiest unknown addresses:
 Unmapped network 66.77.89.91 count 122
 ```
 
-Add the network to the right provider file (for example `66.77.0.0/16` in `providers/zoom.txt`, or `66.77.89.91/32` in a new `providers/3cx.txt` for your own PBX) and restart.
+Add it in the settings window's **Providers** page: a list named after the provider adds to it (for example `zoom` with `66.77.0.0/16`), a new name is a new provider (for example `3cx` with `66.77.89.91` for your own PBX). Saving reloads the monitor.
 
 ### MQTT: "not authorised"
 
@@ -359,8 +400,10 @@ src/
   Capture/                  IPv4/IPv6 packet parsing, interface selection, packet filter
   LogFile.cs                rolling log file (Serilog)
   MonitorState.cs           call and pause state
-  Ipc/                      named pipe for the tray app (shared message contract)
+  Ipc/                      named pipe for the tray app and settings window (shared message contracts)
+  Settings/                 settings store, who may edit, self-restart
 tray/RtcCallMonitor.Tray    WinForms tray app
+settings/RtcCallMonitor.Settings  WinUI 3 settings window (not in the .sln; build-release.ps1 publishes it)
   TrafficMonitor.cs         ties capture to the detector
   ProviderCatalog.cs        loads providers/*.txt (+ auto/), IP → provider lookup, live reload
   ProviderUpdates/          Teams/Zoom list downloads, file watcher

@@ -1,6 +1,7 @@
 // WebhookNotifier.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - TestAsync for the settings window's "Send test".
 //   1.0.0 - Initial version. Replaces Webhook.cs: POSTs {provider} on call start
 //           and {provider, duration} on call end, with optional custom headers,
 //           a 10 s timeout and logged failures.
@@ -43,6 +44,37 @@ namespace RtcCallMonitor.Notifications
             PostAsync(_options.CallEndUrl,
                 new { provider = call.Provider, duration = (int)(call.Duration ?? TimeSpan.Zero).TotalSeconds },
                 cancellationToken);
+
+        /// <summary>POSTs a test call (provider "test") to url; returns (ok, plain-language message).</summary>
+        public static async Task<(bool Ok, string Message)> TestAsync(string url, System.Collections.Generic.IDictionary<string, string> headers, CancellationToken ct)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            {
+                return (false, "Enter a full http:// or https:// URL.");
+            }
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, uri)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(new { provider = "test", test = true }), Encoding.UTF8, "application/json")
+                };
+                if (headers != null)
+                {
+                    foreach (var header in headers) request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                }
+                using var response = await Client.SendAsync(request, ct);
+                var code = $"{(int)response.StatusCode} {response.ReasonPhrase}";
+                return response.IsSuccessStatusCode
+                    ? (true, $"{uri.Host} answered {code}.")
+                    : (false, $"{uri.Host} answered {code}.");
+            }
+            catch (Exception e) when (!ct.IsCancellationRequested)
+            {
+                var inner = e;
+                while (inner.InnerException != null) inner = inner.InnerException;
+                return (false, $"Could not reach {uri.Host}: {inner.Message}");
+            }
+        }
 
         private async Task PostAsync(string url, object body, CancellationToken cancellationToken)
         {

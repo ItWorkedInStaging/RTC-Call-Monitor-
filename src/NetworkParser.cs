@@ -1,6 +1,8 @@
 // NetworkParser.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - A single address ("203.0.113.10", "2001:db8::1") is accepted as a
+//           one-address range (/32 or /128), e.g. for a PBX's IP.
 //   1.1.0 - Reject shorthand IPv4 such as "3.7.35/25", which .NET would read as
 //           3.7.0.35 and silently turn into the wrong network.
 //   1.0.0 - Initial version. Wraps System.Net.IPNetwork parsing (replaces the
@@ -16,7 +18,7 @@ namespace RtcCallMonitor
     public static class NetworkParser
     {
         /// <summary>
-        /// Parses a CIDR range such as "192.168.1.0/24". If the address has host
+        /// Parses a CIDR range such as "192.168.1.0/24", or a single address. If the address has host
         /// bits set they are cleared, and <paramref name="corrected"/> is set to
         /// the range actually used; otherwise it is null.
         /// </summary>
@@ -25,6 +27,13 @@ namespace RtcCallMonitor
         {
             corrected = null;
             var value = cidr?.Trim() ?? string.Empty;
+
+            // a single address is a one-address range
+            if (value.IndexOf('/') < 0 && IPAddress.TryParse(value, out var single) && (single.AddressFamily !=
+                System.Net.Sockets.AddressFamily.InterNetwork || value.Split('.').Length == 4))
+            {
+                value += single.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? "/32" : "/128";
+            }
 
             if (value.IndexOf('/') < 0 || !IPNetwork.TryParse(value, out var network))
             {

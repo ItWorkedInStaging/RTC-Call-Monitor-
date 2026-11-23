@@ -1,6 +1,13 @@
 # Install.ps1
-# Version: 1.0.3
+# Version: 1.1.0
 # Changelog:
+#   1.1.0 - Settings move out of Program Files to the config folder
+#           (%ProgramData%\RtcCallMonitor\config), locked to SYSTEM and
+#           Administrators: appsettings.Local.json, your own provider lists
+#           (e.g. 3cx.txt) and the downloaded lists are moved there. The user
+#           running the installer is allowed to change settings with the new
+#           settings window (editors.json), which is installed in settings\.
+#           A first install opens the settings window instead of Notepad.
 #   1.0.3 - First install no longer fails when the release has no
 #           appsettings.Local.example.json (it is looked for in the release too,
 #           and a minimal file is written if it is nowhere).
@@ -23,7 +30,9 @@ param(
     [string]$InstallDir = (Join-Path $env:ProgramFiles 'RtcCallMonitor'),
     [switch]$NoTray,
     [switch]$Elevated,        # internal: set for the elevated half
-    [string]$ResultFile       # internal: where the elevated half writes its outcome
+    [string]$ResultFile,      # internal: where the elevated half writes its outcome
+    [string]$EditorSid,       # internal: the signed-in user who may change settings
+    [string]$EditorName       # internal: their account name, for people reading editors.json
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +41,8 @@ $TrayProcess  = 'RtcCallMonitor.Tray'
 $RunKey       = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunValue     = 'RtcCallMonitorTray'                       # same name the tray's "Start with Windows" uses
 $BackupDir    = Join-Path $env:ProgramData 'RtcCallMonitor'
+$ConfigDir    = Join-Path $BackupDir 'config'                 # settings, your provider lists, downloads
+$SettingsProcess = 'RtcCallMonitor.Settings'
 $PackageRoot  = Split-Path -Parent $PSScriptRoot           # folder with app\, tray\, Install.cmd
 
 function Write-Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
@@ -74,11 +85,87 @@ function Invoke-Robocopy($from, $to, [string[]]$extra) {
 }
 
 # ---------------------------------------------------------------------------
+# Config folder: %ProgramData%\RtcCallMonitor\config
+# ---------------------------------------------------------------------------
+function Move-IfMissing($from, $to) {
+    if (-not (Test-Path $from)) { return $false }
+    if (Test-Path $to) {
+        Rename-Item -Path $from -NewName ((Split-Path -Leaf $from) + '.old') -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    Move-Item -Path $from -Destination $to -Force
+    return $true
+}
+
+function Move-ConfigOutOfProgramFiles($appSrc) {
+    $customDir = Join-Path $ConfigDir 'providers'
+    $autoDir   = Join-Path $customDir 'auto'
+    New-Item -ItemType Directory -Force -Path $autoDir | Out-Null
+    $settings = Join-Path $ConfigDir 'appsettings.Local.json'
+
+    # settings: from the program folder (before 3.0), or the copy kept by an uninstall
+    if (Move-IfMissing (Join-Path $InstallDir 'appsettings.Local.json') $settings) {
+        Write-Ok "moved appsettings.Local.json to $ConfigDir"
+    }
+    $backup = Join-Path $BackupDir 'appsettings.Local.json.bak'
+    if (-not (Test-Path $settings) -and (Test-Path $backup)) {
+        Move-Item $backup $settings
+        Write-Ok "restored your settings from the previous uninstall"
+    }
+
+    if (Test-Path (Join-Path $InstallDir 'providers')) {
+        # downloaded lists
+        $oldAuto = Join-Path $InstallDir 'providers\auto'
+        if (Test-Path $oldAuto) {
+            foreach ($f in Get-ChildItem -Path $oldAuto -File) { [void](Move-IfMissing $f.FullName (Join-Path $autoDir $f.Name)) }
+            Remove-Item -Recurse -Force $oldAuto -ErrorAction SilentlyContinue
+        }
+        # your own lists: .txt files the release does not ship (e.g. 3cx.txt)
+        $bundled = @(Get-ChildItem -Path (Join-Path $appSrc 'providers') -Filter '*.txt' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+        foreach ($f in Get-ChildItem -Path (Join-Path $InstallDir 'providers') -Filter '*.txt' -File) {
+            if ($bundled -notcontains $f.Name) {
+                if (Move-IfMissing $f.FullName (Join-Path $customDir $f.Name)) { Write-Ok "moved your provider list $($f.Name) to $customDir" }
+            }
+        }
+    }
+    foreach ($old in @('update-state.json')) {
+        [void](Move-IfMissing (Join-Path $InstallDir $old) (Join-Path $ConfigDir $old))
+    }
+}
+
+function Set-ConfigFolderAccess {
+    # SYSTEM and Administrators only: the folder holds the MQTT password
+    $ErrorActionPreference = 'Continue'
+    & icacls.exe "$ConfigDir" /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Could not set the permissions of $ConfigDir (icacls exit code $LASTEXITCODE)." }
+    # moved files keep their old permissions: make everything inside inherit from the folder
+    & icacls.exe "$ConfigDir\*" /reset /T /C /Q 2>$null | Out-Null
+}
+
+function Add-Editor {
+    if (-not $EditorSid) { return }
+    $file = Join-Path $ConfigDir 'editors.json'
+    $editors = @()
+    if (Test-Path $file) {
+        try { $editors = @((Get-Content $file -Raw | ConvertFrom-Json).editors | Where-Object { $_ -and $_.sid }) } catch { $editors = @() }
+    }
+    if ($editors | Where-Object { $_.sid -eq $EditorSid }) {
+        Write-Ok "$EditorName can change the settings"
+        return
+    }
+    $editors += [pscustomobject]@{ sid = $EditorSid; name = $EditorName }
+    $json = @{ editors = @($editors) } | ConvertTo-Json -Depth 3
+    [IO.File]::WriteAllText($file, $json, (New-Object Text.UTF8Encoding($false)))
+    Write-Ok "$EditorName can now change the settings (tray > Settings...)"
+}
+
+# ---------------------------------------------------------------------------
 # Elevated half: service and program files
 # ---------------------------------------------------------------------------
 function Install-Elevated {
     $appSrc  = Join-Path $PackageRoot 'app'
     $traySrc = Join-Path $PackageRoot 'tray'
+    $settingsSrc = Join-Path $PackageRoot 'settings'
     if (-not (Test-Path (Join-Path $appSrc 'RtcCallMonitor.exe'))) {
         throw (Get-NotAReleaseMessage $appSrc)
     }
@@ -93,39 +180,41 @@ function Install-Elevated {
         Write-Ok "stopped"
     }
 
-    $trays = Get-Process -Name $TrayProcess -ErrorAction SilentlyContinue
-    if ($trays) {
-        Write-Step "Closing the tray app"
-        $trays | Stop-Process -Force
+    $running = Get-Process -Name $TrayProcess, $SettingsProcess -ErrorAction SilentlyContinue
+    if ($running) {
+        Write-Step "Closing the tray app and the settings window"
+        $running | Stop-Process -Force
         Start-Sleep -Milliseconds 500
     }
 
+    Write-Step "Settings folder $ConfigDir"
+    Move-ConfigOutOfProgramFiles $appSrc
+
     Write-Step ("{0} files in {1}" -f ($(if ($upgrade) { 'Updating' } else { 'Copying' }), $InstallDir))
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-    # keep the user's settings and the downloaded provider lists
+    # never overwrite settings left in the program folder (they were moved above; this is a safety net)
     Invoke-Robocopy $appSrc $InstallDir @('/XF', 'appsettings.Local.json', 'update-state.json', '/XD', (Join-Path $appSrc 'providers\auto'))
     if (-not $NoTray -and (Test-Path $traySrc)) {
         Invoke-Robocopy $traySrc (Join-Path $InstallDir 'tray') @()
     }
+    if (-not $NoTray -and (Test-Path $settingsSrc)) {
+        # /PURGE: the settings window carries its own Windows App SDK files, which change between versions
+        Invoke-Robocopy $settingsSrc (Join-Path $InstallDir 'settings') @('/PURGE')
+    }
     Write-Ok "done"
 
-    $localConfig = Join-Path $InstallDir 'appsettings.Local.json'
+    $localConfig = Join-Path $ConfigDir 'appsettings.Local.json'
     $newConfig = $false
     if (-not (Test-Path $localConfig)) {
-        $backup = Join-Path $BackupDir 'appsettings.Local.json.bak'
-        if (Test-Path $backup) {
-            Copy-Item $backup $localConfig
-            Write-Ok "restored your settings from the previous uninstall ($backup)"
+        $example = @((Join-Path $InstallDir 'appsettings.Local.example.json'),
+                     (Join-Path $appSrc 'appsettings.Local.example.json'),
+                     (Join-Path $PackageRoot 'appsettings.Local.example.json')) |
+                   Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($example) {
+            Copy-Item $example $localConfig
         } else {
-            $example = @((Join-Path $InstallDir 'appsettings.Local.example.json'),
-                         (Join-Path $appSrc 'appsettings.Local.example.json'),
-                         (Join-Path $PackageRoot 'appsettings.Local.example.json')) |
-                       Where-Object { Test-Path $_ } | Select-Object -First 1
-            if ($example) {
-                Copy-Item $example $localConfig
-            } else {
-                # no template in the release: start with the settings most people change
-                @'
+            # no template in the release: start with the settings most people change
+            @'
 {
   "Mqtt": {
     "Enabled": false,
@@ -140,13 +229,15 @@ function Install-Elevated {
   }
 }
 '@ | Set-Content -Path $localConfig -Encoding UTF8
-            }
-            $newConfig = $true
-            Write-Note "created appsettings.Local.json from the example: fill in your MQTT/webhook details"
         }
+        $newConfig = $true
+        Write-Note "first install: fill in your MQTT or webhook details in the settings window (it opens at the end)"
     } else {
-        Write-Ok "kept your appsettings.Local.json"
+        Write-Ok "kept your settings"
     }
+    Set-ConfigFolderAccess
+    Add-Editor
+    Write-Ok "only administrators can open the folder; you change settings with the settings window"
 
     $exe = Join-Path $InstallDir 'RtcCallMonitor.exe'
     $imagePath = '"' + $exe + '"'
@@ -165,11 +256,6 @@ function Install-Elevated {
     & sc.exe failureflag "$ServiceName" 1 | Out-Null
     Write-Ok "starts automatically (delayed start), restarts itself after a crash"
 
-    if ($newConfig) {
-        Write-Note "Opening appsettings.Local.json: save it and close Notepad to continue."
-        Start-Process notepad.exe -ArgumentList ('"' + $localConfig + '"') -Wait
-    }
-
     Write-Step "Starting the monitor"
     Start-Service -Name $ServiceName
     $svc = Get-Service -Name $ServiceName
@@ -184,7 +270,7 @@ function Install-Elevated {
     Write-Ok "running"
     Show-LogTail -Lines 8
 
-    return [pscustomobject]@{ Upgrade = $upgrade; InstallDir = $InstallDir }
+    return [pscustomobject]@{ Upgrade = $upgrade; InstallDir = $InstallDir; NewConfig = $newConfig }
 }
 
 function Show-LogTail([int]$Lines = 15) {
@@ -250,13 +336,18 @@ Write-Ok "found"
 
 # the service part needs administrator rights: run it in an elevated window and wait
 $resultFile = Join-Path $env:TEMP ("RtcCallMonitor-install-{0}.json" -f [guid]::NewGuid().ToString('N'))
+# the signed-in user (not the admin account UAC may switch to) gets to change the settings
+$me = [Security.Principal.WindowsIdentity]::GetCurrent()
+$editorSid  = $me.User.Value
+$editorName = $me.Name
 $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $PSCommandPath + '"'),
-             '-Elevated', '-ResultFile', ('"' + $resultFile + '"'), '-InstallDir', ('"' + $InstallDir + '"'))
+             '-Elevated', '-ResultFile', ('"' + $resultFile + '"'), '-InstallDir', ('"' + $InstallDir + '"'),
+             '-EditorSid', $editorSid, '-EditorName', ('"' + $editorName + '"'))
 if ($NoTray) { $argList += '-NoTray' }
 
 if (Test-Admin) {
     # already elevated (e.g. run from an admin prompt): do it in this window
-    & $PSCommandPath -Elevated -ResultFile $resultFile -InstallDir $InstallDir -NoTray:$NoTray
+    & $PSCommandPath -Elevated -ResultFile $resultFile -InstallDir $InstallDir -NoTray:$NoTray -EditorSid $editorSid -EditorName $editorName
 } else {
     Write-Step "Asking for administrator rights (UAC) to install the service"
     try {
@@ -280,12 +371,17 @@ if (-not $NoTray) {
         Start-Process -FilePath $trayExe
         Write-Ok "started, and starts when you sign in (untick 'Start with Windows' in its menu to stop that)"
     }
+    $settingsExe = Join-Path $InstallDir 'settings\RtcCallMonitor.Settings.exe'
+    if ($result.NewConfig -and (Test-Path $settingsExe)) {
+        Write-Step "Opening the settings window"
+        Start-Process -FilePath $settingsExe
+    }
 }
 
 Write-Host ""
 if ($result.Upgrade) { Write-Host "RTC Call Monitor upgraded." -ForegroundColor Green }
 else { Write-Host "RTC Call Monitor installed." -ForegroundColor Green }
 Write-Host "  Program:  $InstallDir"
-Write-Host "  Settings: $(Join-Path $InstallDir 'appsettings.Local.json') (edit as administrator, then Restart monitor in the tray)"
+Write-Host "  Settings: tray icon > Settings...  (stored in $ConfigDir)"
 Write-Host "  Logs:     $(Join-Path $env:ProgramData 'RtcCallMonitor\logs')"
 Write-Host ""

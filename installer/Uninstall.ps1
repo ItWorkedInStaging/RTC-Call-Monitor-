@@ -1,6 +1,9 @@
 # Uninstall.ps1
-# Version: 1.0.0
+# Version: 1.1.0
 # Changelog:
+#   1.1.0 - Closes the settings window too. Settings now live in
+#           %ProgramData%\RtcCallMonitor\config and are simply left there
+#           (unless you choose to delete them); the next install uses them.
 #   1.0.0 - Initial version. Removes the RTC Call Monitor service, the tray app's
 #           sign-in entry and the program files. Asks whether to keep the
 #           settings and logs; kept settings are restored by the next install.
@@ -17,6 +20,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ServiceName = 'RTC Call Monitor'
 $TrayProcess = 'RtcCallMonitor.Tray'
+$SettingsProcess = 'RtcCallMonitor.Settings'
 $RunKey      = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunValue    = 'RtcCallMonitorTray'
 $DataDir     = Join-Path $env:ProgramData 'RtcCallMonitor'
@@ -41,7 +45,7 @@ function Uninstall-Elevated {
         Write-Ok "removed"
     }
 
-    Get-Process -Name $TrayProcess -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process -Name $TrayProcess, $SettingsProcess -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Milliseconds 500
 
     if (Test-Path $InstallDir) {
@@ -49,7 +53,7 @@ function Uninstall-Elevated {
         if ((Test-Path $local) -and -not $DeleteData) {
             New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
             Copy-Item $local (Join-Path $DataDir 'appsettings.Local.json.bak') -Force
-            Write-Ok "your settings are kept in $DataDir\appsettings.Local.json.bak (the next install restores them)"
+            Write-Ok "settings left in the program folder are kept in $DataDir\appsettings.Local.json.bak (the next install restores them)"
         }
         Write-Step "Deleting $InstallDir"
         Remove-Item -Recurse -Force $InstallDir
@@ -57,9 +61,11 @@ function Uninstall-Elevated {
     }
 
     if ($DeleteData -and (Test-Path $DataDir)) {
-        Write-Step "Deleting settings backup and logs in $DataDir"
+        Write-Step "Deleting the settings, provider lists and logs in $DataDir"
         Remove-Item -Recurse -Force $DataDir
         Write-Ok "deleted"
+    } elseif (Test-Path (Join-Path $DataDir 'config')) {
+        Write-Ok "your settings are kept in $(Join-Path $DataDir 'config') (the next install uses them)"
     }
 }
 
@@ -79,12 +85,12 @@ if ($Elevated) {
 Write-Host ""
 Write-Host "RTC Call Monitor - uninstall" -ForegroundColor White
 Write-Host ""
-$answer = Read-Host "Also delete your settings and the logs in $DataDir? [y/N]"
+$answer = Read-Host "Also delete your settings, your provider lists and the logs in $DataDir? [y/N]"
 $delete = $answer -match '^[Yy]'
 
 Write-Step "Removing the tray app's sign-in entry for $env:USERNAME"
 Remove-ItemProperty -Path $RunKey -Name $RunValue -ErrorAction SilentlyContinue
-Get-Process -Name $TrayProcess -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name $TrayProcess, $SettingsProcess -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Write-Ok "done"
 
 $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $PSCommandPath + '"'), '-Elevated', '-InstallDir', ('"' + $InstallDir + '"'))

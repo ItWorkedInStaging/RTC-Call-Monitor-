@@ -1,6 +1,8 @@
 // ProviderServices.cs
-// Version: 1.0.1
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Downloads go to the config folder (providers\auto); the watcher
+//           follows the config folder's providers (your own lists + downloads).
 //   1.0.1 - "provider ranges reloaded" is logged only when the ranges changed
 //           (the update and the file watcher no longer both log the same reload).
 //   1.0.0 - Initial version. Background services for providers: a scheduled
@@ -45,15 +47,10 @@ namespace RtcCallMonitor.ProviderUpdates
                 _logger.LogInformation("Provider auto-update is off (Providers:AutoUpdate:Enabled)");
                 return;
             }
-            if (!Directory.Exists(_catalog.DirectoryPath))
-            {
-                return; // nothing to update into; reported by the startup check
-            }
-
             var interval = TimeSpan.FromHours(Math.Max(1, _options.IntervalHours));
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd($"RTC-Call-Monitor/{Version()}");
-            var updater = new ProviderUpdater(http, _catalog.DirectoryPath, _logger);
+            var updater = new ProviderUpdater(http, Path.GetDirectoryName(_catalog.AutoDirectoryPath), _logger);
 
             try { await Task.Delay(StartupDelay, stoppingToken); }
             catch (OperationCanceledException) { return; }
@@ -124,10 +121,12 @@ namespace RtcCallMonitor.ProviderUpdates
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            if (!Directory.Exists(_catalog.DirectoryPath)) return Task.CompletedTask;
+            // your own lists and downloads (config folder); without one, the bundled folder
+            var dir = _catalog.CustomDirectoryPath ?? _catalog.DirectoryPath;
+            if (!Directory.Exists(dir)) return Task.CompletedTask;
 
             _timer = new Timer(_ => ReloadAndLog(_catalog, _logger, "file change"), null, Timeout.Infinite, Timeout.Infinite);
-            _watcher = new FileSystemWatcher(_catalog.DirectoryPath, "*.txt")
+            _watcher = new FileSystemWatcher(dir, "*.txt")
             {
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,

@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-x64</RuntimeIdentifiers>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <Version>2.6.0</Version>
+    <Version>3.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

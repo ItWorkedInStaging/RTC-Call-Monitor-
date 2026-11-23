@@ -1,6 +1,9 @@
 # build-release.ps1
-# Version: 1.2.2
+# Version: 1.3.0
 # Changelog:
+#   1.3.0 - Publishes the settings window (WinUI 3, settings\ in the release;
+#           -NoSettingsApp leaves it out) and restores its packages in the
+#           pre-flight checks.
 #   1.2.2 - Puts appsettings.Local.example.json in the release (the installer
 #           uses it to create appsettings.Local.json on a first install).
 #   1.2.1 - Fix for Windows PowerShell 5.1: a program writing to stderr (git
@@ -27,13 +30,15 @@
 #   .\build-release.ps1 -SkipTests    checks and build, no tests
 #   .\build-release.ps1 -SkipChecks   tests and build, no pre-flight checks
 #   .\build-release.ps1 -NoInstall    report missing .NET / NuGet setup instead of installing it
+#   .\build-release.ps1 -NoSettingsApp  release without the settings window
 
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
     [switch]$SkipChecks,
     [switch]$CheckOnly,
-    [switch]$NoInstall
+    [switch]$NoInstall,
+    [switch]$NoSettingsApp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -114,6 +119,7 @@ function Invoke-PreflightChecks {
     $required = @(
         'src\RtcCallMonitor.csproj',
         'tray\RtcCallMonitor.Tray\RtcCallMonitor.Tray.csproj',
+        'settings\RtcCallMonitor.Settings\RtcCallMonitor.Settings.csproj',
         'tests\RtcCallMonitor.Tests\RtcCallMonitor.Tests.csproj',
         'installer\Install.ps1', 'installer\Uninstall.ps1', 'installer\Install.cmd', 'installer\Uninstall.cmd',
         'RtcCallMonitor.sln', 'README.md', 'CHANGELOG.md')
@@ -186,6 +192,10 @@ function Invoke-PreflightChecks {
 
     # restore: every package can be found
     $restore = & dotnet restore (Join-Path $root 'RtcCallMonitor.sln') --nologo 2>&1
+    if ($LASTEXITCODE -eq 0 -and -not $NoSettingsApp) {
+        # the settings window is not in the .sln (it needs a Windows platform): restore it on its own
+        $restore = & dotnet restore (Join-Path $root 'settings\RtcCallMonitor.Settings\RtcCallMonitor.Settings.csproj') -r win-x64 -p:Platform=x64 --nologo 2>&1
+    }
     if ($LASTEXITCODE -eq 0) { Pass "all packages restore" }
     else {
         $errs = $restore | Where-Object { $_ -match 'error' } | Select-Object -First 5
@@ -278,6 +288,12 @@ if ($LASTEXITCODE -ne 0) { throw "Publishing the monitor failed." }
 Write-Host "==> Publishing the tray app" -ForegroundColor Cyan
 & dotnet publish (Join-Path $root 'tray\RtcCallMonitor.Tray\RtcCallMonitor.Tray.csproj') -c Release -r win-x64 --self-contained false -o (Join-Path $out 'tray') --nologo
 if ($LASTEXITCODE -ne 0) { throw "Publishing the tray app failed." }
+
+if (-not $NoSettingsApp) {
+    Write-Host "==> Publishing the settings window" -ForegroundColor Cyan
+    & dotnet publish (Join-Path $root 'settings\RtcCallMonitor.Settings\RtcCallMonitor.Settings.csproj') -c Release -r win-x64 -p:Platform=x64 --self-contained false -o (Join-Path $out 'settings') --nologo
+    if ($LASTEXITCODE -ne 0) { throw "Publishing the settings window failed (run with -NoSettingsApp to build a release without it)." }
+}
 
 # personal settings and downloaded lists never go into a release
 foreach ($private in @('app\appsettings.Local.json', 'app\providers\auto')) {
