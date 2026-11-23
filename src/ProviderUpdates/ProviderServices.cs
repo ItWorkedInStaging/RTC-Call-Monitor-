@@ -1,6 +1,8 @@
 // ProviderServices.cs
-// Version: 1.0.0
+// Version: 1.0.1
 // Changelog:
+//   1.0.1 - "provider ranges reloaded" is logged only when the ranges changed
+//           (the update and the file watcher no longer both log the same reload).
 //   1.0.0 - Initial version. Background services for providers: a scheduled
 //           auto-update (startup + every Providers:AutoUpdate:IntervalHours) and
 //           a file watcher that reloads the ranges when any providers/*.txt
@@ -150,8 +152,13 @@ namespace RtcCallMonitor.ProviderUpdates
         {
             try
             {
-                if (catalog.Reload(out var errors, out var warnings))
+                if (catalog.Reload(out var errors, out var warnings, out var changed))
                 {
+                    if (!changed)
+                    {
+                        logger.LogDebug("provider files re-read ({Reason}): no changes", reason);
+                        return;
+                    }
                     foreach (var w in warnings) logger.LogWarning(w);
                     var summary = string.Join(", ", catalog.Networks.OrderBy(p => p.Key).Select(p => $"{p.Key} {p.Value.Length}"));
                     logger.LogInformation("provider ranges reloaded ({Reason}): {Summary}", reason, summary);

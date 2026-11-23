@@ -1,6 +1,7 @@
 // Program.cs
-// Version: 2.1.0
+// Version: 2.2.0
 // Changelog:
+//   2.2.0 - Rolling log file (LogFile section) as an extra logging provider.
 //   2.1.0 - Registers the provider auto-update and provider file watcher services.
 //   2.0.0 - Config layers: appsettings.json, appsettings.{Environment}.json,
 //           appsettings.Local.json (git-ignored), RTCMON_ environment variables,
@@ -53,13 +54,17 @@ namespace RtcCallMonitor
                         config.Sources.Insert(0, new MemoryConfigurationSource { InitialData = legacy });
                     }
                 })
-                .ConfigureLogging(builder =>
+                .ConfigureLogging((hostContext, builder) =>
                 {
                     builder.AddSimpleConsole(o =>
                     {
                         o.SingleLine = true;
                         o.TimestampFormat = "yyyy-MM-dd HH:mm:ss ";
                     });
+
+                    var logDir = LogFile.AddTo(builder, hostContext.Configuration, out var problem);
+                    if (problem != null) configWarnings.Items.Add(problem);
+                    if (logDir != null) configWarnings.Info.Add($"Writing log files to {logDir}");
                 })
                 .ConfigureServices((hostContext, services) =>
                 {

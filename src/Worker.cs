@@ -1,6 +1,8 @@
 // Worker.cs
-// Version: 2.1.0
+// Version: 2.2.0
 // Changelog:
+//   2.2.0 - Logs where the log file is written; every 5 minutes a debug line
+//           with the IPv6 / unparsed packet counters.
 //   2.1.0 - Startup log shows where each provider's ranges came from; checks
 //           the Providers:AutoUpdate settings.
 //   2.0.0 - Validates config at startup and exits with clear errors; sends call
@@ -25,6 +27,9 @@ namespace RtcCallMonitor
     public class ConfigWarnings
     {
         public List<string> Items { get; } = new List<string>();
+
+        /// <summary>Informational startup messages (e.g. the log file location).</summary>
+        public List<string> Info { get; } = new List<string>();
     }
 
     public class Worker : BackgroundService
@@ -39,6 +44,8 @@ namespace RtcCallMonitor
         private readonly MqttOptions _mqtt;
         private readonly ProvidersOptions _providersOptions;
         private readonly List<ICallNotifier> _notifiers;
+        private readonly NetworkListener _listener;
+        private DateTime _nextCounterLog = DateTime.UtcNow.AddMinutes(5);
 
         public Worker(
             IHostApplicationLifetime host,
@@ -50,8 +57,10 @@ namespace RtcCallMonitor
             IOptions<WebhookOptions> webhook,
             IOptions<MqttOptions> mqtt,
             IOptions<ProvidersOptions> providersOptions,
-            IEnumerable<ICallNotifier> notifiers)
+            IEnumerable<ICallNotifier> notifiers,
+            NetworkListener listener)
         {
+            _listener = listener;
             _host = host;
             _logger = logger;
             _monitor = monitor;
@@ -66,6 +75,7 @@ namespace RtcCallMonitor
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            foreach (var info in _configWarnings.Info) _logger.LogInformation(info);
             foreach (var warning in _configWarnings.Items) _logger.LogWarning(warning);
             foreach (var warning in _providers.Warnings) _logger.LogWarning(warning);
 
@@ -125,6 +135,13 @@ namespace RtcCallMonitor
                     {
                         await Task.Delay(_detection.CheckIntervalMs, stoppingToken);
                         _monitor.CheckStats();
+
+                        if (DateTime.UtcNow >= _nextCounterLog)
+                        {
+                            _nextCounterLog = DateTime.UtcNow.AddMinutes(5);
+                            var (ipv6, unparsed) = _listener.Counters;
+                            _logger.LogDebug("capture counters: {Ipv6} IPv6 packets, {Unparsed} unparsed packets so far", ipv6, unparsed);
+                        }
                     }
                     catch (OperationCanceledException)
                     {

@@ -1,6 +1,7 @@
 // ProviderCatalog.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - Reload reports whether the ranges actually changed.
 //   1.1.0 - Reloadable while running (Reload swaps in a new set of ranges, or
 //           keeps the current one if the files have errors). Files in
 //           <Directory>/auto (downloaded lists) replace the bundled file of the
@@ -28,6 +29,7 @@ namespace RtcCallMonitor
         {
             public Dictionary<string, IPNetwork[]> Networks;
             public Dictionary<string, string> Sources; // provider -> file/section it came from
+            public string Fingerprint;
             public readonly ConcurrentDictionary<string, string> Cache = new ConcurrentDictionary<string, string>();
         }
 
@@ -90,10 +92,14 @@ namespace RtcCallMonitor
         /// Re-reads the provider files. On success the new ranges are used from the
         /// next lookup on; if there are errors the current ranges stay in use.
         /// </summary>
-        public bool Reload(out List<string> errors, out List<string> warnings)
+        public bool Reload(out List<string> errors, out List<string> warnings) => Reload(out errors, out warnings, out _);
+
+        /// <summary>As Reload, and says whether the ranges or their sources differ from before.</summary>
+        public bool Reload(out List<string> errors, out List<string> warnings, out bool changed)
         {
             errors = new List<string>();
             warnings = new List<string>();
+            changed = false;
             if (string.IsNullOrEmpty(DirectoryPath)) return false;
 
             lock (_reloadLock)
@@ -101,10 +107,16 @@ namespace RtcCallMonitor
                 var dir = string.IsNullOrWhiteSpace(_options.Directory) ? "providers" : _options.Directory;
                 var snapshot = Build(_options, dir, DirectoryPath, errors, warnings);
                 if (errors.Count > 0) return false;
-                _snapshot = snapshot;
+                changed = snapshot.Fingerprint != _snapshot.Fingerprint;
+                if (changed) _snapshot = snapshot;
                 return true;
             }
         }
+
+        private static string FingerprintOf(Dictionary<string, IPNetwork[]> networks, Dictionary<string, string> sources) =>
+            string.Join("|", networks.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv =>
+                kv.Key + "@" + (sources.TryGetValue(kv.Key, out var src) ? src : "") + ":" +
+                string.Join(",", kv.Value.Select(n => n.ToString()).OrderBy(x => x, StringComparer.Ordinal))));
 
         private static Snapshot Build(ProvidersOptions options, string dir, string fullDir, List<string> errors, List<string> warnings)
         {
@@ -173,10 +185,12 @@ namespace RtcCallMonitor
                 errors.Add($"No provider IP ranges loaded (looked in {fullDir}).");
             }
 
+            var usedSources = sources.Where(kv => networks.ContainsKey(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
             return new Snapshot
             {
                 Networks = networks,
-                Sources = sources.Where(kv => networks.ContainsKey(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
+                Sources = usedSources,
+                Fingerprint = FingerprintOf(networks, usedSources),
             };
         }
 

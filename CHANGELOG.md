@@ -4,6 +4,22 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.3.0] - 2026-11-23
+
+### Added
+- **Capture on every network connection at once**: one capture socket per address on all active connections (Wi-Fi, Ethernet, VPN), instead of the single address found through a lookup of 8.8.8.8. Connections are re-scanned about 2 seconds after Windows reports an address change, so a VPN connecting or a Wi-Fi switch needs no restart.
+- **IPv6**: global IPv6 addresses are captured too (`Detection.CaptureIPv6`, default on), with a parser for IPv6 headers and their extension headers.
+- `Detection.Interfaces` (only these connections) and `Detection.ExcludeInterfaces` (skip these; default: Hyper-V/WSL `vEthernet`, VirtualBox, VMware, Teredo, ISATAP, Bluetooth), with `*`/`?` wildcards on the connection's name or description.
+- **Rolling log file** (`LogFile` section, Serilog): `%ProgramData%\RtcCallMonitor\logs\rtc-call-monitor-YYYYMMDD.log`, one file per day, new part at 10 MB, 14 days kept. Console and Event Viewer logging are unchanged.
+- Tests for packet parsing, connection selection and the packet filter.
+
+### Changed
+- `Detection.LocalNetworks` is now optional: each connection's own subnet is ignored automatically.
+- `IPHeader.cs` replaced by `Capture/IpPacket.cs`; each capture socket has its own receive buffer.
+
+### Fixed
+- "provider ranges reloaded" was logged twice after a list update (once by the update, once by the file watcher); it is now logged only when the ranges actually changed.
+
 ## [2.2.0] - 2026-11-23
 
 ### Added

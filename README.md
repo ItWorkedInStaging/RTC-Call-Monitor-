@@ -10,7 +10,7 @@ This is a maintained fork of [ericgla/RTC-Call-Monitor](https://github.com/ericg
 
 Call audio and video travel over UDP to the provider's media servers. Every second the monitor:
 
-1. Counts UDP packets between your PC and each remote IP address (traffic inside your local network is ignored).
+1. Counts UDP packets between your PC and each remote IP address, on every active network connection at once (Wi-Fi, Ethernet, VPN; IPv4 and IPv6). Traffic inside your local networks is ignored.
 2. Checks the busiest addresses against the known IP ranges of each provider (`src/providers/*.txt`).
 3. Reports a **call started** when a provider's traffic stays above the threshold for a few seconds, and **call ended** when it stops.
 
@@ -51,11 +51,10 @@ Other providers can be added with a text file; see [Providers](#providers). Chan
 
    If restore fails with `NU1100 Unable to resolve ...`, NuGet has no package source: run `dotnet nuget add source https://api.nuget.org/v3/index.json -n nuget.org`.
 
-2. **Create your settings file**: copy `src\appsettings.Local.example.json` to `src\appsettings.Local.json` (this file is git-ignored) and set at least:
+2. **Create your settings file**: copy `src\appsettings.Local.example.json` to `src\appsettings.Local.json` (this file is git-ignored) and set at least an output:
 
    ```json
    {
-     "Detection": { "LocalNetworks": [ "192.168.1.0/24" ] },
      "Mqtt": {
        "Enabled": true,
        "Host": "192.168.1.10",
@@ -65,7 +64,7 @@ Other providers can be added with a text file; see [Providers](#providers). Chan
    }
    ```
 
-   `LocalNetworks` is your home/office subnet in [CIDR notation](https://www.digitalocean.com/community/tutorials/understanding-ip-addresses-subnets-and-cidr-notation-for-networking): for IP `192.168.1.100` with mask `255.255.255.0` it is `192.168.1.0/24`.
+   Your local networks are detected from your network connections, so they usually need no setting (see [Detection](#detection)).
 
 3. **Run it** from a terminal opened with *Run as administrator*:
 
@@ -74,7 +73,7 @@ Other providers can be added with a text file; see [Providers](#providers). Chan
    dotnet run
    ```
 
-   You should see the providers load and, with MQTT enabled, `MQTT connected to ...`. Join a call: after about 2 seconds the log shows `call started for msteams ...`.
+   You should see the providers load, a `capturing on ...` line for each network connection and, with MQTT enabled, `MQTT connected to ...`. Join a call: after about 2 seconds the log shows `call started for msteams ...`. The same lines go to a log file (see [Logs](#logs)).
 
 ## Home Assistant
 
@@ -133,13 +132,18 @@ Config files from versions before 2.1 (`Application` and `Provider` sections) st
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `LocalNetworks` | – | Your local subnets; traffic inside them is ignored |
+| `LocalNetworks` | `[]` | Extra local subnets whose traffic is ignored ([CIDR notation](https://www.digitalocean.com/community/tutorials/understanding-ip-addresses-subnets-and-cidr-notation-for-networking), e.g. `192.168.1.0/24`). Each connection's own subnet is always ignored, so this is only needed for other local networks you reach through a router |
+| `Interfaces` | `[]` | Capture only on connections whose name or description matches one of these patterns (`*` and `?` wildcards), e.g. `[ "Wi-Fi", "NordLynx*" ]`. Empty: all connections |
+| `ExcludeInterfaces` | virtual adapters | Connections to skip when `Interfaces` is empty. Default: `vEthernet*` (Hyper-V/WSL/Docker), Hyper-V, VirtualBox and VMware adapters, Teredo, ISATAP, Bluetooth. Setting it replaces that list |
+| `CaptureIPv6` | `true` | Also capture on global IPv6 addresses |
 | `CheckIntervalMs` | `1000` | Length of each measurement interval, in milliseconds |
 | `MinPacketRate` | `1` | UDP packets per interval to/from a provider IP that count as call traffic |
 | `CallStartIntervals` | `2` | Busy intervals in a row before a call is reported as started |
 | `CallEndIntervals` | `3` | Quiet intervals in a row before a call is reported as ended |
 
 While a call is active, traffic to *any* IP of the same provider keeps it alive, so the provider moving your call to another server doesn't end it.
+
+The monitor captures on every address of every selected connection and re-scans about 2 seconds after Windows reports a change, so connecting a VPN, switching Wi-Fi or plugging in a cable is picked up without a restart. With a VPN, calls are seen on the VPN connection (the physical one only carries the encrypted tunnel).
 
 ### Outputs
 
@@ -246,7 +250,31 @@ Start-Service "RTC Call Monitor"
 - `install.ps1` creates (or recreates) the **RTC Call Monitor** service with automatic start. It uses `Remove-Service`, which needs PowerShell 7 (`winget install Microsoft.PowerShell`).
 - The service runs as *Local System* by default, which has the rights needed for packet capture.
 - The service reads its settings from the `publish` folder. `appsettings.Local.json` is copied there by `dotnet publish` if it exists in `src`; after changing settings, publish again or edit the copy in `publish`, then restart the service.
-- Warnings and errors from the service are written to the Windows **Event Viewer** (Windows Logs → Application, source *RtcCallMonitor*). To see everything, run it with `dotnet run` instead.
+- Logs: see [Logs](#logs). Warnings and errors also go to the Windows **Event Viewer** (Windows Logs → Application, source *RtcCallMonitor*).
+
+## Logs
+
+Everything the console shows is also written to a log file:
+
+```text
+C:\ProgramData\RtcCallMonitor\logs\rtc-call-monitor-20261123.log
+```
+
+- One file per day; a file that reaches `MaxFileSizeMB` continues in `..._001.log`. The last `RetainedDays` files are kept.
+- Levels come from the `Logging` section, so `"RtcCallMonitor": "Debug"` adds the debug lines to the file too.
+- Watch it live: `Get-Content C:\ProgramData\RtcCallMonitor\logs\rtc-call-monitor-*.log -Tail 20 -Wait`
+- Warnings and errors also appear in Event Viewer when running as a service.
+
+```json
+"LogFile": {
+  "Enabled": true,
+  "Directory": "",
+  "RetainedDays": 14,
+  "MaxFileSizeMB": 10
+}
+```
+
+`Directory` empty means `%ProgramData%\RtcCallMonitor\logs`; environment variables such as `%LOCALAPPDATA%` work. If the folder can't be written, the app logs a warning and carries on without the file.
 
 ## Troubleshooting
 
@@ -281,6 +309,8 @@ Add the network to the right provider file (for example `66.77.0.0/16` in `provi
 | `provider files have 1 problem(s); still using the previous ranges` | A provider file you edited has a mistake; fix it and save again |
 | `'... ' is not a network address, using ...` | A range in a provider file has host bits set; it still works, but the file should be corrected |
 | `Packet capture currently requires Windows` | Running on Linux/macOS (or in Docker), which isn't supported |
+| `no network address to capture on` | Offline, or `Interfaces` / `ExcludeInterfaces` leave no connection; check the `capturing on` lines |
+| `cannot capture on Wi-Fi (2001:...)` | IPv6 capture isn't available on that connection; IPv4 still works. Set `CaptureIPv6` to `false` to hide this |
 | `An attempt was made to access a socket in a way forbidden` | Not running as administrator |
 
 ## Development
@@ -288,7 +318,9 @@ Add the network to the right provider file (for example `66.77.0.0/16` in `provi
 ```text
 src/
   CallDetector.cs           start/end logic (no dependencies, unit-tested)
-  NetworkListener.cs        raw socket capture
+  NetworkListener.cs        raw socket capture, one socket per address
+  Capture/                  IPv4/IPv6 packet parsing, interface selection, packet filter
+  LogFile.cs                rolling log file (Serilog)
   TrafficMonitor.cs         ties capture to the detector
   ProviderCatalog.cs        loads providers/*.txt (+ auto/), IP → provider lookup, live reload
   ProviderUpdates/          Teams/Zoom list downloads, file watcher

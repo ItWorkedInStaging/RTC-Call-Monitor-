@@ -1,6 +1,7 @@
 // ProviderUpdaterTests.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Reload reports whether anything changed.
 //   1.0.0 - Initial version. Auto-update against a fake HTTP server: first
 //           download, version-unchanged skip, broken/empty/shrunken downloads
 //           rejected, network failure keeps the current list; catalog override
@@ -155,6 +156,22 @@ namespace RtcCallMonitor.Tests
             Assert.False(catalog.Reload(out var errors, out _));
             Assert.Contains("zoom.txt line 3", Assert.Single(errors));
             Assert.Equal("zoom", catalog.Lookup("3.7.35.1"));
+        }
+
+        [Fact]
+        public void Reload_ReportsWhetherRangesChanged()
+        {
+            var catalog = ProviderCatalog.Load(new ProvidersOptions { Directory = "providers" }, _root);
+            Assert.True(catalog.Reload(out _, out _, out var changed));
+            Assert.False(changed);
+
+            File.AppendAllText(Path.Combine(_providers, "zoom.txt"), "# just a comment\n");
+            Assert.True(catalog.Reload(out _, out _, out changed));
+            Assert.False(changed);
+
+            File.AppendAllText(Path.Combine(_providers, "zoom.txt"), "3.21.137.128/25\n");
+            Assert.True(catalog.Reload(out _, out _, out changed));
+            Assert.True(changed);
         }
 
         [Fact]

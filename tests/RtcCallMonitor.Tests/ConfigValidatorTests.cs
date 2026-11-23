@@ -1,6 +1,7 @@
 // ConfigValidatorTests.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Empty LocalNetworks is now valid (interface subnets are used).
 //   1.0.0 - Initial version. Startup validation of Detection, Webhook and Mqtt.
 
 using RtcCallMonitor.Configuration;
@@ -19,10 +20,9 @@ namespace RtcCallMonitor.Tests
         }
 
         [Fact]
-        public void EmptyLocalNetworks_IsAnError()
+        public void EmptyLocalNetworks_IsValid()
         {
-            var errors = ConfigValidator.Validate(new DetectionOptions(), new WebhookOptions(), new MqttOptions());
-            Assert.Contains("Detection.LocalNetworks is empty", Assert.Single(errors));
+            Assert.Empty(ConfigValidator.Validate(new DetectionOptions(), new WebhookOptions(), new MqttOptions()));
         }
 
         [Fact]

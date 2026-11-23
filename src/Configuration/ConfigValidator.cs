@@ -1,6 +1,7 @@
 // ConfigValidator.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - Detection.LocalNetworks may be empty (interfaces' subnets are used).
 //   1.1.0 - ValidateProviders: Providers:AutoUpdate:IntervalHours.
 //   1.0.0 - Initial version. Startup checks for the Detection, Webhook and
 //           Mqtt sections, returning plain-language error messages.
@@ -18,11 +19,7 @@ namespace RtcCallMonitor.Configuration
             var errors = new List<string>();
 
             // Detection
-            if (detection.LocalNetworks == null || detection.LocalNetworks.Length == 0)
-            {
-                errors.Add("Detection.LocalNetworks is empty: add your local subnet, e.g. [\"192.168.1.0/24\"].");
-            }
-            else
+            if (detection.LocalNetworks != null)
             {
                 foreach (var net in detection.LocalNetworks)
                 {

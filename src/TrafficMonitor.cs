@@ -1,3 +1,11 @@
+// TrafficMonitor.cs
+// Version: 2.0.0
+// Changelog:
+//   2.0.0 - Uses NetworkListener's multi-address capture; re-scans interfaces
+//           2 s after Windows reports an address change (replaces the 8.8.8.8
+//           single-address detection).
+//   1.x   - Original monitor.
+
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RtcCallMonitor.Configuration;
@@ -6,7 +14,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using System.Threading;
 
 namespace RtcCallMonitor
@@ -17,8 +24,8 @@ namespace RtcCallMonitor
         private readonly CallDetector _detector;
         private readonly ILogger<TrafficMonitor> _logger;
         private readonly DetectionOptions _detection;
-        private NetworkListener _listener;
-        private IPAddress _ipAddress = IPAddress.Loopback;
+        private readonly NetworkListener _listener;
+        private Timer _refreshTimer;
 
         public delegate void UnknownNetwork(string ip, int packetCount);
         public delegate void CallStart(string ip, string provider, int packetCount, DateTimeOffset startedAt);
@@ -44,57 +51,30 @@ namespace RtcCallMonitor
 
         public void Start()
         {
-            _listener.OnUDPTafficReceived += (IPHeader ipHeader) =>
+            _listener.OnUdpPacket += (remote, inbound) =>
             {
-                if (ipHeader.Inbound)
-                {
-                    _detector.RecordInbound(ipHeader.SourceAddress.ToString());
-                }
-                else
-                {
-                    _detector.RecordOutbound(ipHeader.DestinationAddress.ToString());
-                }
+                if (inbound) _detector.RecordInbound(remote.ToString());
+                else _detector.RecordOutbound(remote.ToString());
             };
 
-            NetworkChange.NetworkAddressChanged += NetworkChange_NetworkAddressChanged;
-            NetworkChange_NetworkAddressChanged(null, null);
+            _listener.Refresh();
+
+            // re-scan when addresses change (VPN up/down, Wi-Fi switch, DHCP renew);
+            // Windows raises several events in a row, so wait for them to settle
+            _refreshTimer = new Timer(_ => RefreshListener(), null, Timeout.Infinite, Timeout.Infinite);
+            NetworkChange.NetworkAddressChanged += (_, __) => _refreshTimer.Change(TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
         }
 
-        private void NetworkChange_NetworkAddressChanged(object sender, EventArgs e)
+        private void RefreshListener()
         {
-            _logger.LogInformation($"network changed!");
-            Thread.Sleep(_detection.CheckIntervalMs);
-            IPAddress newIpAddress = IPAddress.Loopback;
             try
             {
-                /* 
-                 * Attempt to detect the current IP address by defining a fake connection to an arbitrary remote IP
-                 * This implementation is cross-platform and should work on Windows/Linux
-                 */
-                using (Socket socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
-                {
-                    socket.Connect("8.8.8.8", 65530);
-                    if (socket.LocalEndPoint is IPEndPoint endPoint)
-                    {
-                        newIpAddress = endPoint.Address;
-                        _logger.LogInformation($"Auto-detected IP address: {newIpAddress}");
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Failed to auto-detect IP adress!");
-                    }
-                };
+                _logger.LogInformation("network addresses changed, re-scanning interfaces");
+                _listener.Refresh();
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                _logger.LogWarning("Unable to detect correct IP address - no valid network available. Exception type: {FullName}", ex.GetType().FullName);
-                _logger.LogWarning($"Defaulting IP address to loopback: {newIpAddress}");
-            }
-
-            if ((newIpAddress != IPAddress.Loopback) && (_ipAddress != newIpAddress))
-            {
-                _ipAddress = newIpAddress;
-                _listener.UpdateIpAddress(_ipAddress);
+                _logger.LogWarning("re-scanning interfaces failed: {Message}", e.Message);
             }
         }
 
