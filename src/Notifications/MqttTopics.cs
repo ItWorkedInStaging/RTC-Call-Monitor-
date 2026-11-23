@@ -1,6 +1,7 @@
 // MqttTopics.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - "Detection paused" binary sensor (paused topic, attributes until).
 //   1.0.0 - Initial version. MQTT topic names and Home Assistant discovery
 //           payloads (binary_sensor on_call, sensor call_provider,
 //           sensor last_call_duration). Pure functions so they can be tested.
@@ -30,6 +31,7 @@ namespace RtcCallMonitor
         public string Attributes => Base + "/attributes";
         public string LastDuration => Base + "/last_duration";
         public string Availability => Base + "/availability";
+        public string Paused => Base + "/paused";
 
         /// <summary>Home Assistant publishes "online" here when it (re)starts.</summary>
         public string HomeAssistantStatus => DiscoveryPrefix + "/status";
@@ -106,9 +108,17 @@ namespace RtcCallMonitor
             duration["unit_of_measurement"] = "s";
             duration["icon"] = "mdi:timer-outline";
 
+            var paused = Common("detection_paused", "Detection paused");
+            paused["state_topic"] = Paused;
+            paused["payload_on"] = On;
+            paused["payload_off"] = Off;
+            paused["icon"] = "mdi:pause-circle-outline";
+            paused["entity_category"] = "diagnostic";
+
             return new[]
             {
                 ($"{DiscoveryPrefix}/binary_sensor/{DeviceId}/on_call/config", JsonSerializer.Serialize(onCall)),
+                ($"{DiscoveryPrefix}/binary_sensor/{DeviceId}/detection_paused/config", JsonSerializer.Serialize(paused)),
                 ($"{DiscoveryPrefix}/sensor/{DeviceId}/call_provider/config", JsonSerializer.Serialize(provider)),
                 ($"{DiscoveryPrefix}/sensor/{DeviceId}/last_call_duration/config", JsonSerializer.Serialize(duration)),
             };

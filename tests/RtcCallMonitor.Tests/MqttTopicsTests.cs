@@ -1,6 +1,7 @@
 // MqttTopicsTests.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Four discovery entities (Detection paused added).
 //   1.0.0 - Initial version. Topic names, device id slugs and Home Assistant
 //           discovery payloads.
 
@@ -37,15 +38,16 @@ namespace RtcCallMonitor.Tests
         }
 
         [Fact]
-        public void Discovery_DefinesThreeEntitiesOnOneDevice()
+        public void Discovery_DefinesFourEntitiesOnOneDevice()
         {
             var t = new MqttTopics("rtc-call-monitor", "homeassistant", "josh-pc");
             var messages = t.DiscoveryMessages("2.1.0");
 
-            Assert.Equal(3, messages.Count);
+            Assert.Equal(4, messages.Count);
             Assert.Equal("homeassistant/binary_sensor/josh-pc/on_call/config", messages[0].Topic);
-            Assert.Equal("homeassistant/sensor/josh-pc/call_provider/config", messages[1].Topic);
-            Assert.Equal("homeassistant/sensor/josh-pc/last_call_duration/config", messages[2].Topic);
+            Assert.Equal("homeassistant/binary_sensor/josh-pc/detection_paused/config", messages[1].Topic);
+            Assert.Equal("homeassistant/sensor/josh-pc/call_provider/config", messages[2].Topic);
+            Assert.Equal("homeassistant/sensor/josh-pc/last_call_duration/config", messages[3].Topic);
 
             var docs = messages.Select(m => JsonDocument.Parse(m.Payload).RootElement).ToList();
             foreach (var d in docs)
@@ -62,7 +64,11 @@ namespace RtcCallMonitor.Tests
             Assert.Equal("OFF", onCall.GetProperty("payload_off").GetString());
             Assert.Equal("rtc-call-monitor/josh-pc/attributes", onCall.GetProperty("json_attributes_topic").GetString());
 
-            var duration = docs[2];
+            var paused = docs[1];
+            Assert.Equal("rtc-call-monitor/josh-pc/paused", paused.GetProperty("state_topic").GetString());
+            Assert.Equal("diagnostic", paused.GetProperty("entity_category").GetString());
+
+            var duration = docs[3];
             Assert.Equal("duration", duration.GetProperty("device_class").GetString());
             Assert.Equal("s", duration.GetProperty("unit_of_measurement").GetString());
         }

@@ -1,6 +1,8 @@
 // Worker.cs
-// Version: 2.2.0
+// Version: 2.3.0
 // Changelog:
+//   2.3.0 - Calls go through CallReporter (pause/resume for the tray app); a timed
+//           pause ends on its own.
 //   2.2.0 - Logs where the log file is written; every 5 minutes a debug line
 //           with the IPv6 / unparsed packet counters.
 //   2.1.0 - Startup log shows where each provider's ranges came from; checks
@@ -28,6 +30,9 @@ namespace RtcCallMonitor
     {
         public List<string> Items { get; } = new List<string>();
 
+        /// <summary>Folder the log file is written to, or null.</summary>
+        public string LogDirectory { get; set; }
+
         /// <summary>Informational startup messages (e.g. the log file location).</summary>
         public List<string> Info { get; } = new List<string>();
     }
@@ -44,6 +49,7 @@ namespace RtcCallMonitor
         private readonly MqttOptions _mqtt;
         private readonly ProvidersOptions _providersOptions;
         private readonly List<ICallNotifier> _notifiers;
+        private readonly CallReporter _reporter;
         private readonly NetworkListener _listener;
         private DateTime _nextCounterLog = DateTime.UtcNow.AddMinutes(5);
 
@@ -57,10 +63,11 @@ namespace RtcCallMonitor
             IOptions<WebhookOptions> webhook,
             IOptions<MqttOptions> mqtt,
             IOptions<ProvidersOptions> providersOptions,
-            IEnumerable<ICallNotifier> notifiers,
+            CallReporter reporter,
             NetworkListener listener)
         {
             _listener = listener;
+            _reporter = reporter;
             _host = host;
             _logger = logger;
             _monitor = monitor;
@@ -70,7 +77,7 @@ namespace RtcCallMonitor
             _webhook = webhook.Value;
             _mqtt = mqtt.Value;
             _providersOptions = providersOptions.Value;
-            _notifiers = notifiers.Where(n => n.Enabled).ToList();
+            _notifiers = reporter.Notifiers.ToList();
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -135,6 +142,7 @@ namespace RtcCallMonitor
                     {
                         await Task.Delay(_detection.CheckIntervalMs, stoppingToken);
                         _monitor.CheckStats();
+                        _reporter.Tick();
 
                         if (DateTime.UtcNow >= _nextCounterLog)
                         {
@@ -162,25 +170,13 @@ namespace RtcCallMonitor
         private void OnCallStarted(string ip, string provider, int packetCount, DateTimeOffset startedAt)
         {
             _logger.LogInformation("call started for {Provider} on {Ip} count {Count}", provider, ip, packetCount);
-            Notify(n => n.CallStartedAsync(new CallInfo { Provider = provider, Ip = ip, StartedAt = startedAt }, CancellationToken.None));
+            _reporter.CallDetected(provider, ip, startedAt);
         }
 
         private void OnCallEnded(string provider, TimeSpan duration)
         {
             _logger.LogInformation("call ended for {Provider}, time {Seconds} seconds", provider, (int)duration.TotalSeconds);
-            Notify(n => n.CallEndedAsync(new CallInfo { Provider = provider, Duration = duration }, CancellationToken.None));
-        }
-
-        private void Notify(Func<ICallNotifier, Task> send)
-        {
-            foreach (var notifier in _notifiers)
-            {
-                _ = Task.Run(async () =>
-                {
-                    try { await send(notifier); }
-                    catch (Exception e) { _logger.LogWarning("{Notifier} output failed: {Message}", notifier.Name, e.Message); }
-                });
-            }
+            _reporter.CallFinished(provider, duration);
         }
 
         private async Task StopNotifiersAsync()

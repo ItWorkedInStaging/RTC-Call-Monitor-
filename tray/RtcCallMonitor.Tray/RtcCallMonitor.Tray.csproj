@@ -1,0 +1,31 @@
+<!--
+  RtcCallMonitor.Tray.csproj
+  Version: 1.0.0
+  Changelog:
+    1.0.0 - Initial version. Windows tray app for RTC Call Monitor (WinForms).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- lets CI build this on Linux; the app itself only runs on Windows -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <AssemblyName>RtcCallMonitor.Tray</AssemblyName>
+    <RootNamespace>RtcCallMonitor.Tray</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- the pipe messages are shared with the monitor -->
+    <Compile Include="..\..\src\Ipc\StatusContract.cs" Link="Ipc\StatusContract.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.0" />
+  </ItemGroup>
+</Project>

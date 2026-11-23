@@ -276,6 +276,36 @@ C:\ProgramData\RtcCallMonitor\logs\rtc-call-monitor-20261123.log
 
 `Directory` empty means `%ProgramData%\RtcCallMonitor\logs`; environment variables such as `%LOCALAPPDATA%` work. If the folder can't be written, the app logs a warning and carries on without the file.
 
+## Tray app
+
+`RtcCallMonitor.Tray` is a small helper in the notification area. It talks to the running monitor (service or `dotnet run`) over a local named pipe; closing it doesn't stop detection.
+
+| Icon | Meaning |
+|---|---|
+| Green dot | Watching, no call |
+| Red dot | On a call (tooltip shows provider and minutes) |
+| Amber with ‖ | Detection paused |
+| Orange with ! | Watching, but something needs attention (MQTT not connected, no network connection captured, no output enabled) |
+| Grey ring | Monitor not running |
+
+Left-click shows the status (connections captured, MQTT/webhook). The right-click menu has:
+
+- **Pause detection** for 15 minutes, 1 hour, 4 hours or until resumed, and **Resume detection**. Pausing ends a call that was already reported; Home Assistant gets a **Detection paused** entity (`binary_sensor.<device>_detection_paused`). A call still going when you resume is reported again.
+- **Open log file**, **Open log folder**, **Open config folder** (selects `appsettings.Local.json`), **Open README**.
+- **Restart monitor**: restarts the Windows service so settings changes take effect (asks for administrator rights). Only available when the monitor is installed as a service.
+- **Start with Windows**: starts the tray app when you sign in (for your user only, no admin needed).
+
+Build and run it:
+
+```powershell
+dotnet publish tray\RtcCallMonitor.Tray -c Release -o publish\tray
+publish\tray\RtcCallMonitor.Tray.exe
+```
+
+Then tick **Start with Windows** in its menu. Only one copy runs per user.
+
+The pipe (`\\.\pipe\RtcCallMonitor`) only accepts connections from users signed in to this PC, not from the network.
+
 ## Troubleshooting
 
 ### Call not detected
@@ -321,6 +351,9 @@ src/
   NetworkListener.cs        raw socket capture, one socket per address
   Capture/                  IPv4/IPv6 packet parsing, interface selection, packet filter
   LogFile.cs                rolling log file (Serilog)
+  MonitorState.cs           call and pause state
+  Ipc/                      named pipe for the tray app (shared message contract)
+tray/RtcCallMonitor.Tray    WinForms tray app
   TrafficMonitor.cs         ties capture to the detector
   ProviderCatalog.cs        loads providers/*.txt (+ auto/), IP → provider lookup, live reload
   ProviderUpdates/          Teams/Zoom list downloads, file watcher

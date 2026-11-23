@@ -4,6 +4,19 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-11-23
+
+### Added
+- **Tray app** (`tray/RtcCallMonitor.Tray`, version 1.0.0): status icon and tooltip (watching, on call, paused, problem, monitor not running), pause for 15 min / 1 h / 4 h / until resumed, resume, open log file / log folder / config folder / README, restart the monitor service (UAC), start with Windows, about.
+- Local named pipe `RtcCallMonitor` in the monitor for the tray app: status, pause and resume; on Windows only signed-in users of this PC can connect.
+- Pause/resume of call reporting: pausing ends a reported call, resuming reports a call that is still going, a timed pause ends by itself.
+- MQTT: **Detection paused** binary sensor (diagnostic) on the Home Assistant device.
+- README.md is copied next to the monitor for the tray's "Open README".
+- Tests for pause/resume, the pipe requests and a real pipe round trip (81 in total).
+
+### Changed
+- Sending calls to the outputs moved from `Worker` into `CallReporter`.
+
 ## [2.3.1] - 2026-11-23
 
 ### Fixed

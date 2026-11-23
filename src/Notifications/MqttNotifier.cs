@@ -1,6 +1,8 @@
 // MqttNotifier.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Publishes the paused state (IPauseAwareNotifier) for the tray app's
+//           pause/resume, retained and re-sent after reconnecting.
 //   1.0.0 - Initial version. Publishes call state to MQTT (MQTTnet 5) with
 //           Home Assistant discovery: retained state/provider/attributes/
 //           last_duration, availability with Last Will, re-announce when HA
@@ -18,7 +20,7 @@ using RtcCallMonitor.Configuration;
 
 namespace RtcCallMonitor.Notifications
 {
-    public class MqttNotifier : ICallNotifier, IDisposable
+    public class MqttNotifier : ICallNotifier, IPauseAwareNotifier, IDisposable
     {
         private static readonly TimeSpan[] Backoff =
         {
@@ -45,6 +47,7 @@ namespace RtcCallMonitor.Notifications
         private string _ip;
         private DateTimeOffset? _startedAt;
         private int? _lastDurationSeconds;
+        private bool _paused;
 
         public MqttNotifier(IOptions<MqttOptions> options, ILogger<MqttNotifier> logger)
         {
@@ -206,13 +209,21 @@ namespace RtcCallMonitor.Notifications
             await PublishStateAsync(ct);
         }
 
+        public async Task SetPausedAsync(bool paused, DateTimeOffset? until, CancellationToken cancellationToken)
+        {
+            lock (_stateLock) _paused = paused;
+            await PublishAsync(_topics.Paused, paused ? MqttTopics.On : MqttTopics.Off, cancellationToken);
+        }
+
         private async Task PublishStateAsync(CancellationToken ct)
         {
-            bool onCall; string provider, ip; DateTimeOffset? started; int? last;
+            bool onCall; string provider, ip; DateTimeOffset? started; int? last; bool paused;
             lock (_stateLock)
             {
-                onCall = _onCall; provider = _provider; ip = _ip; started = _startedAt; last = _lastDurationSeconds;
+                onCall = _onCall; provider = _provider; ip = _ip; started = _startedAt; last = _lastDurationSeconds; paused = _paused;
             }
+
+            await PublishAsync(_topics.Paused, paused ? MqttTopics.On : MqttTopics.Off, ct);
 
             await PublishAsync(_topics.State, onCall ? MqttTopics.On : MqttTopics.Off, ct);
             await PublishAsync(_topics.Provider, provider ?? MqttTopics.NoProvider, ct);

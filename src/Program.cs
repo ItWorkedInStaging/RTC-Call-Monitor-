@@ -1,6 +1,7 @@
 // Program.cs
-// Version: 2.2.0
+// Version: 2.3.0
 // Changelog:
+//   2.3.0 - Registers MonitorState, CallReporter and the tray status pipe.
 //   2.2.0 - Rolling log file (LogFile section) as an extra logging provider.
 //   2.1.0 - Registers the provider auto-update and provider file watcher services.
 //   2.0.0 - Config layers: appsettings.json, appsettings.{Environment}.json,
@@ -18,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RtcCallMonitor.Configuration;
+using RtcCallMonitor.Ipc;
 using RtcCallMonitor.Notifications;
 using RtcCallMonitor.ProviderUpdates;
 
@@ -65,6 +67,7 @@ namespace RtcCallMonitor
                     var logDir = LogFile.AddTo(builder, hostContext.Configuration, out var problem);
                     if (problem != null) configWarnings.Items.Add(problem);
                     if (logDir != null) configWarnings.Info.Add($"Writing log files to {logDir}");
+                    configWarnings.LogDirectory = logDir;
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
@@ -84,10 +87,13 @@ namespace RtcCallMonitor
 
                     services.AddSingleton<ICallNotifier, WebhookNotifier>();
                     services.AddSingleton<ICallNotifier, MqttNotifier>();
+                    services.AddSingleton<MonitorState>(_ => new MonitorState());
+                    services.AddSingleton<CallReporter>();
 
                     services.AddHostedService<Worker>();
                     services.AddHostedService<ProviderFileWatcher>();
                     services.AddHostedService<ProviderUpdateService>();
+                    services.AddHostedService<StatusPipeServer>();
                 })
                 .UseWindowsService();
         }
