@@ -4,6 +4,11 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.4.1] - 2026-11-23
+
+### Fixed
+- Tray app 1.1.0: the menu follows the Windows light/dark mode (the taskbar's "Windows mode" setting) and switches live when it changes; in high-contrast mode it keeps the system colours.
+
 ## [2.4.0] - 2026-11-23
 
 ### Added

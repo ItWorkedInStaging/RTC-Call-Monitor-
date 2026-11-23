@@ -1,6 +1,7 @@
 // TrayContext.cs
-// Version: 1.0.0
+// Version: 1.1.0
 // Changelog:
+//   1.1.0 - Menu follows the Windows light/dark mode, and switches live.
 //   1.0.0 - Initial version. Tray icon and menu: status every 2 s from the
 //           monitor's pipe, pause/resume, open log/config/README, restart the
 //           service (UAC), start with Windows, about, exit.
@@ -90,6 +91,9 @@ namespace RtcCallMonitor.Tray
 
             _menu.Opening += (_, __) => RefreshMenu();
             RefreshMenu();
+
+            TrayTheme.Apply(_menu);
+            SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
         }
 
         // ---------- status ----------
@@ -339,8 +343,18 @@ namespace RtcCallMonitor.Tray
 
         private static string Truncate(string text, int max) => text.Length <= max ? text : text.Substring(0, max - 1) + "…";
 
+        private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
+        {
+            // light/dark switches arrive as General (theme) or Color changes
+            if (e.Category == UserPreferenceCategory.General || e.Category == UserPreferenceCategory.Color)
+            {
+                TrayTheme.Apply(_menu);
+            }
+        }
+
         protected override void ExitThreadCore()
         {
+            SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
             _timer.Stop();
             _icon.Visible = false;
             _icon.Dispose();
