@@ -1,6 +1,8 @@
 // CaptureAddresses.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - PacketFilter skips packets whose remote UDP port is ignored
+//           (default 443: QUIC / HTTP/3 web traffic, not call media).
 //   1.1.0 - OnePerInterfaceAndFamily: the address that gets the capture socket.
 //   1.0.0 - Initial version. Chooses which local addresses to capture on, from
 //           the PC's network interfaces and Detection.Interfaces /
@@ -153,11 +155,13 @@ namespace RtcCallMonitor.Capture
     {
         private readonly HashSet<IPAddress> _localAddresses;
         private readonly List<IPNetwork> _localNetworks;
+        private readonly HashSet<int> _ignoredRemotePorts;
 
-        public PacketFilter(IEnumerable<IPAddress> localAddresses, IEnumerable<IPNetwork> localNetworks)
+        public PacketFilter(IEnumerable<IPAddress> localAddresses, IEnumerable<IPNetwork> localNetworks, IEnumerable<int> ignoredRemotePorts = null)
         {
             _localAddresses = new HashSet<IPAddress>(localAddresses);
             _localNetworks = localNetworks.ToList();
+            _ignoredRemotePorts = new HashSet<int>((ignoredRemotePorts ?? Array.Empty<int>()).Where(p => p > 0));
         }
 
         /// <summary>
@@ -176,6 +180,10 @@ namespace RtcCallMonitor.Capture
             else return false;
 
             if (IpPacket.IsNonUnicast(remote) || IPAddress.IsLoopback(remote) || _localAddresses.Contains(remote)) return false;
+
+            // e.g. UDP 443 is QUIC (HTTP/3): browsing Google, Microsoft or Cloudflare sites, not a call
+            var remotePort = inbound ? packet.SourcePort : packet.DestinationPort;
+            if (_ignoredRemotePorts.Contains(remotePort)) return false;
             foreach (var network in _localNetworks)
             {
                 if (network.Contains(remote)) return false;

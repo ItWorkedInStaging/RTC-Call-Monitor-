@@ -1,6 +1,7 @@
 // CaptureTests.cs
-// Version: 1.1.0
+// Version: 1.2.0
 // Changelog:
+//   1.2.0 - UDP ports parsed; remote UDP 443 (QUIC) ignored by the filter.
 //   1.1.0 - One capture socket per connection and IP version.
 //   1.0.0 - Initial version. IPv4/IPv6 packet parsing, interface selection
 //           (include/exclude patterns, address kinds, subnets) and the packet
@@ -17,12 +18,14 @@ namespace RtcCallMonitor.Tests
 {
     public class CaptureTests
     {
-        private static byte[] V4(string src, string dst, byte protocol = 17)
+        private static byte[] V4(string src, string dst, byte protocol = 17, int srcPort = 50000, int dstPort = 3478)
         {
             var p = new byte[28];
             p[0] = 0x45; p[9] = protocol;
             IPAddress.Parse(src).GetAddressBytes().CopyTo(p, 12);
             IPAddress.Parse(dst).GetAddressBytes().CopyTo(p, 16);
+            p[20] = (byte)(srcPort >> 8); p[21] = (byte)srcPort;
+            p[22] = (byte)(dstPort >> 8); p[23] = (byte)dstPort;
             return p;
         }
 
@@ -50,6 +53,22 @@ namespace RtcCallMonitor.Tests
             Assert.True(p.IsUdp);
             Assert.Equal(IPAddress.Parse("192.168.1.5"), p.Source);
             Assert.Equal(IPAddress.Parse("52.112.1.2"), p.Destination);
+        }
+
+        [Fact]
+        public void ParsesUdpPorts_IPv4AndIPv6()
+        {
+            Assert.True(IpPacket.TryParse(V4("192.168.1.5", "52.112.1.2", 17, 50123, 3478), out var p4));
+            Assert.Equal(50123, p4.SourcePort);
+            Assert.Equal(3478, p4.DestinationPort);
+
+            var v6 = V6("2001:db8::5", "2603:1063::1", 0, 17);
+            var udpAt = 40 + 8;
+            v6[udpAt] = 0xC3; v6[udpAt + 1] = 0x50;      // 50000
+            v6[udpAt + 2] = 0x01; v6[udpAt + 3] = 0xBB;  // 443
+            Assert.True(IpPacket.TryParse(v6, out var p6));
+            Assert.Equal(50000, p6.SourcePort);
+            Assert.Equal(443, p6.DestinationPort);
         }
 
         [Fact]
@@ -144,7 +163,27 @@ namespace RtcCallMonitor.Tests
 
         private static PacketFilter Filter() => new PacketFilter(
             new[] { IPAddress.Parse("10.69.199.37"), IPAddress.Parse("10.5.0.2"), IPAddress.Parse("2001:db8:1::37") },
-            new[] { IPNetwork.Parse("10.69.0.0/16"), IPNetwork.Parse("10.5.0.2/32"), IPNetwork.Parse("2001:db8:1::/64") });
+            new[] { IPNetwork.Parse("10.69.0.0/16"), IPNetwork.Parse("10.5.0.2/32"), IPNetwork.Parse("2001:db8:1::/64") },
+            new[] { 443 });
+
+        [Fact]
+        public void Filter_IgnoresQuic_OnRemoteUdp443_BothDirections()
+        {
+            var f = Filter();
+            Assert.False(Classify(f, V4("10.69.199.37", "74.125.250.10", 17, 51000, 443), out _, out _));  // browser -> Google QUIC
+            Assert.False(Classify(f, V4("74.125.250.10", "10.69.199.37", 17, 443, 51000), out _, out _));  // reply
+            Assert.True(Classify(f, V4("10.69.199.37", "74.125.250.10", 17, 51000, 19302), out _, out _)); // Meet media
+            Assert.True(Classify(f, V4("170.114.0.9", "10.69.199.37", 17, 8801, 51000), out _, out _));    // Zoom media
+            // a local port of 443 doesn't matter, only the remote one
+            Assert.True(Classify(f, V4("10.69.199.37", "52.112.1.2", 17, 443, 3478), out _, out _));
+        }
+
+        [Fact]
+        public void Filter_WithNoIgnoredPorts_CountsQuic()
+        {
+            var f = new PacketFilter(new[] { IPAddress.Parse("10.69.199.37") }, new[] { IPNetwork.Parse("10.69.0.0/16") }, new[] { 0 });
+            Assert.True(Classify(f, V4("10.69.199.37", "74.125.250.10", 17, 51000, 443), out _, out _));
+        }
 
         private static bool Classify(PacketFilter f, byte[] raw, out IPAddress remote, out bool inbound)
         {

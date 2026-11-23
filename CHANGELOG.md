@@ -4,6 +4,14 @@ All notable changes to this fork of [ericgla/RTC-Call-Monitor](https://github.co
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions use [Semantic Versioning](https://semver.org/).
 
+## [2.6.0] - 2026-11-24
+
+### Added
+- `Detection.IgnoreUdpPorts` (default `[ 443 ]`): packets whose remote UDP port is listed never count as call traffic. UDP 443 is QUIC (HTTP/3), which browsers use for Google and many other sites; call media uses other ports.
+
+### Fixed
+- False Google Meet detections while browsing (e.g. a Home Assistant dashboard loading Google content): QUIC traffic on UDP 443 is ignored, and `googlemeet.txt` now holds only Google's published Meet media ranges (`74.125.250.0/24`, `74.125.247.128/32`, `142.250.82.0/24` and the IPv6 ranges) instead of the original project's wider `74.125.240.0/20`.
+
 ## [2.5.1] - 2026-11-24
 
 ### Added

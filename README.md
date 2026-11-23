@@ -23,7 +23,7 @@ It only looks at packet counts and IP addresses: it never reads call content. Ca
 | Microsoft Teams | `msteams.txt` | [Microsoft 365 IP web service](https://learn.microsoft.com/en-us/microsoft-365/enterprise/microsoft-365-ip-web-service) (Teams media, Optimize category). **Updated automatically** |
 | Zoom | `zoom.txt` | [ZoomMeetings.txt](https://assets.zoom.us/docs/ipranges/ZoomMeetings.txt). **Updated automatically** |
 | Webex | `webex.txt` | Original project config |
-| Google Meet | `googlemeet.txt` | [Prepare your network for Meet](https://support.google.com/a/answer/1279090) (Workspace and personal accounts) |
+| Google Meet | `googlemeet.txt` | [Prepare your network for Meet](https://support.google.com/a/answer/1279090): only Meet's media ranges (Workspace and personal accounts) |
 | GoTo Meeting | `gotomeeting.txt` | Original project config plus [GoTo's published media ranges](https://support.goto.com/meeting/help/minimal-firewall-settings-for-the-goto-app) |
 | Slack | `slack.txt` | Original project config |
 | Discord | `discord.txt` | Original project config |
@@ -136,6 +136,7 @@ Config files from versions before 2.1 (`Application` and `Provider` sections) st
 | `Interfaces` | `[]` | Capture only on connections whose name or description matches one of these patterns (`*` and `?` wildcards), e.g. `[ "Wi-Fi", "NordLynx*" ]`. Empty: all connections |
 | `ExcludeInterfaces` | virtual adapters | Connections to skip when `Interfaces` is empty. Default: `vEthernet*` (Hyper-V/WSL/Docker), Hyper-V, VirtualBox and VMware adapters, Teredo, ISATAP, Bluetooth. Setting it replaces that list |
 | `CaptureIPv6` | `true` | Also capture on global IPv6 addresses |
+| `IgnoreUdpPorts` | `[ 443 ]` | Remote UDP ports that never count as call traffic. UDP 443 is QUIC (HTTP/3): browsers use it for Google, Microsoft, Cloudflare and other sites, so it would look like call traffic to those providers. Call media uses other ports (Teams 3478–3481, Zoom 8801–8810, Meet 3478 and 19302–19309). `[ 0 ]` ignores none |
 | `CheckIntervalMs` | `1000` | Length of each measurement interval, in milliseconds |
 | `MinPacketRate` | `1` | UDP packets per interval to/from a provider IP that count as call traffic |
 | `CallStartIntervals` | `2` | Busy intervals in a row before a call is reported as started |

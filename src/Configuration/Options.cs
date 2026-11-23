@@ -1,6 +1,7 @@
 // Options.cs
-// Version: 1.3.0
+// Version: 1.4.0
 // Changelog:
+//   1.4.0 - Detection.IgnoreUdpPorts (default 443, QUIC web traffic).
 //   1.3.0 - LogFile section (rolling log file).
 //   1.2.0 - Detection.Interfaces, ExcludeInterfaces, CaptureIPv6; LocalNetworks
 //           is now optional (each interface's own subnet is added automatically).
@@ -29,6 +30,12 @@ namespace RtcCallMonitor.Configuration
 
         /// <summary>Also capture on global IPv6 addresses.</summary>
         public bool CaptureIPv6 { get; set; } = true;
+
+        /// <summary>
+        /// Remote UDP ports that never count as call traffic. Default 443: QUIC (HTTP/3)
+        /// web traffic, e.g. a browser talking to Google. Set to [ 0 ] to ignore none.
+        /// </summary>
+        public int[] IgnoreUdpPorts { get; set; } = { 443 };
 
         /// <summary>Length of each measurement interval in milliseconds.</summary>
         public int CheckIntervalMs { get; set; } = 1000;

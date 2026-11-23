@@ -1,6 +1,7 @@
 ﻿// NetworkListener.cs
-// Version: 2.0.1
+// Version: 2.0.2
 // Changelog:
+//   2.0.2 - Passes Detection.IgnoreUdpPorts to the packet filter.
 //   2.0.1 - One capture socket per connection and IP version: SIO_RCVALL already
 //           delivers every packet of the adapter, so a socket per address counted
 //           IPv6 packets once per address (Windows gives Wi-Fi several IPv6
@@ -132,7 +133,7 @@ namespace RtcCallMonitor
                 var captured = selected.Where(t => _sockets.Values.Any(s => s.Target.InterfaceName == t.InterfaceName &&
                                                                               s.Target.Address.AddressFamily == t.Address.AddressFamily)).ToList();
                 var localNetworks = captured.Select(t => t.Subnet).Concat(_configuredLocalNetworks).Distinct().ToList();
-                _filter = new PacketFilter(captured.Select(t => t.Address), localNetworks);
+                _filter = new PacketFilter(captured.Select(t => t.Address), localNetworks, _detection.IgnoreUdpPorts);
 
                 if (_sockets.Count == 0)
                 {
