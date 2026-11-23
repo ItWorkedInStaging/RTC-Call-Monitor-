@@ -234,23 +234,36 @@ Long vendor lists can be merged into fewer ranges with the helper script (needs 
 python .\consolidate-ips.py --input "D:\Downloads\ZoomMeetings.txt"
 ```
 
-## Running as a Windows service
+## Installing (one click)
 
-To start the monitor automatically with Windows:
+For everyday use, install the monitor as a Windows service plus the tray app with the installer.
+
+**1. Build a release** (on the PC with the source, from the repository root):
 
 ```powershell
-# from the repository root, in an administrator PowerShell 7 window
-dotnet publish src -c Release -r win-x64 --self-contained false -o publish
-copy install.ps1 publish\
-cd publish
-.\install.ps1
-Start-Service "RTC Call Monitor"
+.\build-release.ps1
 ```
 
-- `install.ps1` creates (or recreates) the **RTC Call Monitor** service with automatic start. It uses `Remove-Service`, which needs PowerShell 7 (`winget install Microsoft.PowerShell`).
-- The service runs as *Local System* by default, which has the rights needed for packet capture.
-- The service reads its settings from the `publish` folder. `appsettings.Local.json` is copied there by `dotnet publish` if it exists in `src`; after changing settings, publish again or edit the copy in `publish`, then restart the service.
-- Logs: see [Logs](#logs). Warnings and errors also go to the Windows **Event Viewer** (Windows Logs → Application, source *RtcCallMonitor*).
+This runs the tests, publishes both apps and creates `release\RtcCallMonitor-<version>\` and `release\RtcCallMonitor-<version>.zip`. Your `appsettings.Local.json` is never put into a release.
+
+**2. Install or upgrade:** double-click **`Install.cmd`** in that folder (or in the extracted zip). It asks for administrator rights once (UAC), then:
+
+- checks for the .NET 10 Desktop Runtime and offers to install it with winget if it's missing;
+- stops the running service and tray app (upgrade);
+- copies the files to `C:\Program Files\RtcCallMonitor` (tray in `tray\`), **keeping** your `appsettings.Local.json`, the downloaded `providers\auto` lists and the logs;
+- on a first install creates `appsettings.Local.json` from the example and opens it in Notepad for your MQTT/webhook details;
+- creates or updates the **RTC Call Monitor** service: automatic (delayed) start, restarts itself 1 minute after a crash;
+- starts the service and shows the last log lines;
+- starts the tray app and sets it to start when you sign in.
+
+Running `Install.cmd` from a newer release upgrades in place. Options for `installer\Install.ps1`: `-InstallDir <folder>`, `-NoTray`. A log of the elevated part is written to `%TEMP%\RtcCallMonitor-install.log`.
+
+**Uninstall:** double-click **`Uninstall.cmd`**. It removes the service, the tray's sign-in entry and the program folder, and asks whether to delete your settings and logs. If you keep them, the settings are saved to `%ProgramData%\RtcCallMonitor\appsettings.Local.json.bak` and the next install restores them.
+
+**Changing settings later:** edit `C:\Program Files\RtcCallMonitor\appsettings.Local.json` (open the editor as administrator, or use the tray's **Open config folder**), then **Restart monitor** in the tray menu.
+
+- The service runs as *Local System*, which has the rights needed for packet capture.
+- Warnings and errors also go to the Windows **Event Viewer** (Windows Logs → Application, source *RtcCallMonitor*).
 
 ## Logs
 
@@ -295,14 +308,7 @@ Left-click shows the status (connections captured, MQTT/webhook). The right-clic
 - **Restart monitor**: restarts the Windows service so settings changes take effect (asks for administrator rights). Only available when the monitor is installed as a service.
 - **Start with Windows**: starts the tray app when you sign in (for your user only, no admin needed).
 
-Build and run it:
-
-```powershell
-dotnet publish tray\RtcCallMonitor.Tray -c Release -o publish\tray
-publish\tray\RtcCallMonitor.Tray.exe
-```
-
-Then tick **Start with Windows** in its menu. Only one copy runs per user.
+The installer sets it up (see [Installing](#installing-one-click)). To run it from the source instead: `dotnet run --project tray\RtcCallMonitor.Tray`. Only one copy runs per user.
 
 The pipe (`\\.\pipe\RtcCallMonitor`) only accepts connections from users signed in to this PC, not from the network.
 
