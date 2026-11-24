@@ -1,6 +1,12 @@
 // StatusPipeServer.cs
-// Version: 2.0.1
+// Version: 2.0.2
 // Changelog:
+//   2.0.2 - The caller is identified from the client process's own token only
+//           (no impersonating the client on our threads, which could leave the
+//           accept loop unable to open the next pipe instance). Fixes "self"
+//           being worked out while impersonating, which made every caller look
+//           like the service's own account. A pipe instance that cannot be
+//           created is retried instead of stopping the server.
 //   2.0.1 - Caller identification falls back to the client process's token
 //           when the impersonation token cannot be read.
 //   2.0.0 - Settings commands for the settings window: getSettings,
@@ -76,8 +82,10 @@ namespace RtcCallMonitor.Ipc
                 }
                 catch (Exception e)
                 {
-                    _logger.LogWarning("tray status pipe unavailable: {Message}", e.Message);
-                    return;
+                    _logger.LogWarning("tray status pipe unavailable: {Message}; retrying", e.Message);
+                    try { await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken); }
+                    catch (OperationCanceledException) { break; }
+                    continue;
                 }
 
                 try
@@ -178,28 +186,12 @@ namespace RtcCallMonitor.Ipc
             }
         }
 
+        /// <summary>
+        /// The account of the process at the other end of the pipe, from that process's own token.
+        /// The client stays connected while we look, so its process id cannot be reused meanwhile.
+        /// </summary>
         [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         private static Caller IdentifyWindowsCaller(NamedPipeServerStream pipe)
-        {
-            Caller caller = null;
-            try
-            {
-                pipe.RunAsClient(() =>
-                {
-                    using var id = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
-                    caller = Describe(id);
-                });
-            }
-            catch (Exception)
-            {
-                caller = null;
-            }
-            return caller ?? IdentifyByProcess(pipe);
-        }
-
-        /// <summary>The account of the process at the other end of the pipe (its own token).</summary>
-        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-        private static Caller IdentifyByProcess(NamedPipeServerStream pipe)
         {
             if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid)) return null;
             var process = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
@@ -223,6 +215,14 @@ namespace RtcCallMonitor.Ipc
             }
         }
 
+        // the account this process runs as (worked out once, never while impersonating)
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static readonly Lazy<SecurityIdentifier> SelfSid = new Lazy<SecurityIdentifier>(() =>
+        {
+            using var self = WindowsIdentity.GetCurrent(ifImpersonating: false) ?? WindowsIdentity.GetCurrent();
+            return self.User;
+        });
+
         [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool GetNamedPipeClientProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint clientProcessId);
 
@@ -238,13 +238,12 @@ namespace RtcCallMonitor.Ipc
         [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         private static Caller Describe(WindowsIdentity id)
         {
-            using var self = WindowsIdentity.GetCurrent();
             return new Caller
             {
                 Sid = id.User?.Value,
                 Name = id.Name,
                 IsElevatedAdmin = new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator),
-                IsSelf = id.User != null && id.User.Equals(self.User),
+                IsSelf = id.User != null && id.User.Equals(SelfSid.Value),
             };
         }
 
