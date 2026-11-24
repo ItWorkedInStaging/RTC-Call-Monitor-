@@ -1,6 +1,9 @@
 // SettingsTests.cs
-// Version: 1.0.0
+// Version: 1.0.1
 // Changelog:
+//   1.0.1 - Fixes for Windows: the test folders are not locked (that shut the
+//           tests out of their own folder), and a kept password may come back
+//           encrypted (DPAPI), so it is compared decrypted.
 //   1.0.0 - Initial version. Config folder layout, provider lists from the
 //           config folder, SettingsStore read/save (secrets kept and never
 //           sent back, other keys kept, nothing written on errors), the
@@ -46,7 +49,7 @@ namespace RtcCallMonitor.Tests
             File.WriteAllLines(Path.Combine(_app, "providers", "msteams.txt"), new[] { "52.112.0.0/14" });
 
             _paths = new ConfigPaths(Path.Combine(_root, "config"));
-            _paths.EnsureCreatedAndLocked();
+            _paths.EnsureCreatedAndLocked(lockFolder: false);
         }
 
         public void Dispose()
@@ -151,7 +154,9 @@ namespace RtcCallMonitor.Tests
             var file = SavedFile();
             Assert.Equal(30, (int)file["LogFile"]["RetainedDays"]);
             Assert.Equal("10.69.69.17", (string)file["Mqtt"]["Host"]);
-            Assert.Equal("hunter2", (string)file["Mqtt"]["Password"]); // NewPassword null: kept (plain off Windows)
+            // NewPassword null: kept; on Windows a plain password is encrypted on save
+            Assert.Equal("hunter2", SecretProtector.Unprotect((string)file["Mqtt"]["Password"]));
+            if (OperatingSystem.IsWindows()) Assert.True(SecretProtector.IsProtected((string)file["Mqtt"]["Password"]));
             Assert.Equal(12, (int)file["Providers"]["AutoUpdate"]["IntervalHours"]);
 
             var again = Store().Read();

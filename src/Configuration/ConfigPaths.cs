@@ -1,6 +1,8 @@
 // ConfigPaths.cs
-// Version: 1.0.0
+// Version: 1.0.1
 // Changelog:
+//   1.0.1 - EnsureCreatedAndLocked(lockFolder: false) only creates the folders
+//           (tests: locking a folder you own on Windows shuts you out of it).
 //   1.0.0 - Initial version. Where the editable configuration lives:
 //           %ProgramData%\RtcCallMonitor\config (appsettings.Local.json, your
 //           own provider lists, downloaded lists, editors.json), outside
@@ -54,7 +56,7 @@ namespace RtcCallMonitor.Configuration
         /// config folder to SYSTEM and Administrators: it holds the MQTT password.
         /// Returns a warning to log, or null.
         /// </summary>
-        public string EnsureCreatedAndLocked()
+        public string EnsureCreatedAndLocked(bool lockFolder = true)
         {
             try
             {
@@ -66,7 +68,7 @@ namespace RtcCallMonitor.Configuration
                 return $"Cannot create the config folder {ConfigDirectory}: {e.Message}";
             }
 
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return null;
+            if (!lockFolder || !RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return null;
             try
             {
                 Lock(ConfigDirectory);

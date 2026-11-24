@@ -1,6 +1,8 @@
 // StatusPipeServer.cs
-// Version: 2.0.0
+// Version: 2.0.1
 // Changelog:
+//   2.0.1 - Caller identification falls back to the client process's token
+//           when the impersonation token cannot be read.
 //   2.0.0 - Settings commands for the settings window: getSettings,
 //           saveSettings (then restarts the monitor), testMqtt, testWebhook,
 //           restart. Only accounts allowed by EditorPolicy may use them; the
@@ -180,13 +182,58 @@ namespace RtcCallMonitor.Ipc
         private static Caller IdentifyWindowsCaller(NamedPipeServerStream pipe)
         {
             Caller caller = null;
-            pipe.RunAsClient(() =>
+            try
             {
-                using var id = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
-                caller = Describe(id);
-            });
-            return caller;
+                pipe.RunAsClient(() =>
+                {
+                    using var id = WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+                    caller = Describe(id);
+                });
+            }
+            catch (Exception)
+            {
+                caller = null;
+            }
+            return caller ?? IdentifyByProcess(pipe);
         }
+
+        /// <summary>The account of the process at the other end of the pipe (its own token).</summary>
+        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+        private static Caller IdentifyByProcess(NamedPipeServerStream pipe)
+        {
+            if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid)) return null;
+            var process = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+            if (process == IntPtr.Zero) return null;
+            try
+            {
+                if (!OpenProcessToken(process, 0x0008 /* TOKEN_QUERY */ | 0x0002 /* TOKEN_DUPLICATE */, out var token)) return null;
+                try
+                {
+                    using var id = new WindowsIdentity(token);
+                    return Describe(id);
+                }
+                finally
+                {
+                    CloseHandle(token);
+                }
+            }
+            finally
+            {
+                CloseHandle(process);
+            }
+        }
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetNamedPipeClientProcessId(Microsoft.Win32.SafeHandles.SafePipeHandle pipe, out uint clientProcessId);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr OpenProcess(uint access, bool inheritHandle, uint processId);
+
+        [System.Runtime.InteropServices.DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
 
         [System.Runtime.Versioning.SupportedOSPlatform("windows")]
         private static Caller Describe(WindowsIdentity id)
