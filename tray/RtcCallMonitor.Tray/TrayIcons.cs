@@ -1,6 +1,9 @@
 // TrayIcons.cs
-// Version: 2.1.0
+// Version: 2.2.0
 // Changelog:
+//   2.2.0 - Bigger and bolder: the glyph fills the whole icon (it was 92 %)
+//           and its outline is thickened (about 1.5 px at 24 px), so it holds
+//           its own next to filled tray icons instead of looking small and grey.
 //   2.1.0 - Badges get a subtle depth like the OneDrive/Microsoft 365 icons:
 //           a top-left to bottom-right gradient (slightly lighter to slightly
 //           darker), a soft drop shadow and a faint darker rim.
@@ -40,6 +43,9 @@ namespace RtcCallMonitor.Tray
         private static readonly Color NeutralDark = Color.FromArgb(0xC8, 0xC8, 0xC8);
         private static readonly Color InkLight = Color.FromArgb(0x1C, 0x1C, 0x1C);  // glyph on a light taskbar
         private static readonly Color InkDark = Color.White;                         // glyph on a dark taskbar
+
+        /// <summary>Extra outline added to the glyph, as a share of the icon size (24 px → ~0.5 px each side).</summary>
+        private const float GlyphStroke = 0.045f;
 
         private static FontFamily _iconFont;
         private static bool _iconFontLooked;
@@ -102,10 +108,17 @@ namespace RtcCallMonitor.Tray
             var ink = dark ? InkDark : InkLight;
             if (state == TrayState.Offline) ink = Color.FromArgb(dark ? 115 : 105, ink);  // greyed out, like a signed-out OneDrive
 
-            using (var glyph = GlyphPath(font, Headset, size))
+            // Fluent glyphs are 1 px outlines: thicken them to tray weight
+            var stroke = Math.Max(0.7f, size * GlyphStroke);
+            using (var glyph = GlyphPath(font, Headset, size, stroke))
             using (var brush = new SolidBrush(ink))
+            using (var pen = new Pen(ink, stroke) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
-                if (glyph != null) g.FillPath(brush, glyph);
+                if (glyph != null)
+                {
+                    g.FillPath(brush, glyph);
+                    g.DrawPath(pen, glyph);
+                }
             }
 
             switch (state)
@@ -123,7 +136,7 @@ namespace RtcCallMonitor.Tray
         }
 
         /// <summary>The glyph as a path, centred and scaled to fill the icon (Fluent glyphs sit inside their em box).</summary>
-        private static GraphicsPath GlyphPath(FontFamily font, string glyph, int size)
+        private static GraphicsPath GlyphPath(FontFamily font, string glyph, int size, float stroke)
         {
             var path = new GraphicsPath();
             path.AddString(glyph, font, (int)FontStyle.Regular, size, PointF.Empty, StringFormat.GenericTypographic);
@@ -134,7 +147,8 @@ namespace RtcCallMonitor.Tray
                 return null;
             }
 
-            var scale = size * 0.92f / Math.Max(bounds.Width, bounds.Height);
+            // fill the icon edge to edge; the thickening stroke stays inside it
+            var scale = (size - stroke) / Math.Max(bounds.Width, bounds.Height);
             using var m = new Matrix();
             m.Translate(-(bounds.X + bounds.Width / 2), -(bounds.Y + bounds.Height / 2), MatrixOrder.Append);
             m.Scale(scale, scale, MatrixOrder.Append);
